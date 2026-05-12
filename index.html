@@ -1,20 +1,716 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>LedgerLite</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
-  <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>LedgerLite</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📒</text></svg>">
+<link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" rel="stylesheet">
+<!-- Supabase loaded as a plain script — no import/module needed -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f7f5f0;--surface:#fff;--surface2:#f0ede6;
+  --border:rgba(0,0,0,.09);--border2:rgba(0,0,0,.17);
+  --text:#1a1a1a;--text2:#5a5750;--text3:#8a8580;
+  --green:#1D9E75;--green-bg:#E1F5EE;--green-dark:#085041;
+  --red:#D85A30;--red-bg:#FAECE7;--red-dark:#4A1B0C;
+  --blue:#185FA5;--blue-bg:#E6F1FB;--blue-dark:#042C53;
+  --amber:#BA7517;--amber-bg:#FAEEDA;--amber-dark:#412402;
+  --purple:#534AB7;--purple-bg:#EEEDFE;--purple-dark:#26215C;
+  --r:10px;--rl:16px;
+  --font:'Georgia',serif;--ui:system-ui,-apple-system,'Segoe UI',sans-serif
+}
+body{font-family:var(--ui);background:var(--bg);color:var(--text);min-height:100vh}
+.app{display:flex;flex-direction:column;min-height:100vh;max-width:920px;margin:0 auto}
+.splash{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;gap:16px;color:var(--text2)}
+.spinner{width:32px;height:32px;border:3px solid var(--border2);border-top-color:var(--text);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+/* AUTH */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px}
+.auth-card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);padding:32px 28px;width:100%;max-width:400px}
+.auth-card h1{font-size:24px;font-family:var(--font);margin-bottom:4px}
+.auth-card .tag{font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5}
+.auth-tabs{display:flex;border-bottom:.5px solid var(--border);margin-bottom:20px}
+.auth-tabs button{flex:1;padding:10px;font-size:13px;font-weight:600;background:none;border:none;cursor:pointer;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;font-family:var(--ui)}
+.auth-tabs button.active{color:var(--text);border-bottom-color:var(--text)}
+/* HEADER */
+.header{background:var(--text);color:#fff;padding:16px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20}
+.header h1{font-size:19px;font-weight:600;font-family:var(--font)}
+.header .sub{font-size:11px;opacity:.5;margin-top:1px}
+.cur-badge{background:rgba(255,255,255,.15);border-radius:6px;padding:4px 10px;font-size:13px;font-weight:600}
+.save-st{font-size:11px;opacity:.6}
+.save-st.saving{opacity:1;color:#ffd080}
+.user-btn{background:rgba(255,255,255,.12);border:none;color:#fff;border-radius:8px;padding:6px 10px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px;font-family:var(--ui)}
+.user-btn:hover{background:rgba(255,255,255,.2)}
+/* NAV */
+.nav{display:flex;background:var(--surface);border-bottom:.5px solid var(--border);overflow-x:auto;position:sticky;top:61px;z-index:19}
+.nav button{flex:1;min-width:72px;padding:11px 6px;font-size:11px;font-weight:500;color:var(--text2);background:none;border:none;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;font-family:var(--ui)}
+.nav button.active{color:var(--text);border-bottom-color:var(--text)}
+.nav button:hover:not(.active){background:var(--surface2)}
+.nav button i{display:block;font-size:17px;margin:0 auto 3px}
+/* CONTENT */
+.content{flex:1;padding:16px}
+/* CARDS */
+.card{background:var(--surface);border:.5px solid var(--border);border-radius:var(--rl);padding:16px 20px;margin-bottom:12px}
+.ct{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
+/* METRICS */
+.metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:12px}
+.metric{background:var(--surface2);border-radius:var(--r);padding:13px 14px}
+.metric .lb{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px}
+.metric .val{font-size:19px;font-weight:600;font-family:var(--font);line-height:1.15}
+.metric .sb{font-size:11px;color:var(--text3);margin-top:3px}
+.gc{color:var(--green-dark)!important}.rc{color:var(--red)!important}.bc{color:var(--blue-dark)!important}.ac{color:var(--amber-dark)!important}.pc{color:var(--purple-dark)!important}
+/* ALERTS */
+.alert{border-radius:var(--r);padding:11px 13px;margin-bottom:12px;font-size:13px;display:flex;align-items:flex-start;gap:8px;line-height:1.55}
+.alert i{font-size:17px;flex-shrink:0;margin-top:1px}
+.warn{background:var(--amber-bg);color:var(--amber-dark);border:.5px solid var(--amber)}
+.succ{background:var(--green-bg);color:var(--green-dark);border:.5px solid var(--green)}
+.dngr{background:var(--red-bg);color:var(--red-dark);border:.5px solid var(--red)}
+.info{background:var(--blue-bg);color:var(--blue-dark);border:.5px solid var(--blue)}
+/* FORMS */
+.fg{display:flex;flex-direction:column;gap:4px}
+.fg label{font-size:12px;font-weight:600;color:var(--text2)}
+.fg input,.fg select,.fg textarea{padding:9px 12px;border:.5px solid var(--border2);border-radius:8px;font-size:14px;font-family:var(--ui);background:var(--bg);color:var(--text);outline:none;width:100%}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--text);background:#fff}
+.fg textarea{resize:vertical;min-height:64px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.full{grid-column:1/-1}
+/* BUTTONS */
+.btn{display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:13px;font-weight:500;cursor:pointer;border:.5px solid var(--border2);background:var(--surface);color:var(--text);font-family:var(--ui);transition:all .15s}
+.btn:hover{background:var(--surface2)}
+.btn:active{transform:scale(.98)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.pri{background:var(--text);color:#fff;border-color:var(--text)}
+.btn.pri:hover{background:#333}
+.btn.dan{background:var(--red-bg);color:var(--red-dark);border-color:var(--red)}
+.btn.fw{width:100%;justify-content:center}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn-row{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+/* TABLES */
+.tw{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:10px;font-weight:700;color:var(--text3);padding:6px 10px;border-bottom:.5px solid var(--border);text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
+td{padding:9px 10px;border-bottom:.5px solid var(--border);vertical-align:middle}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:var(--bg)}
+.badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+.badge.income{background:var(--green-bg);color:var(--green-dark)}
+.badge.expenditure{background:var(--red-bg);color:var(--red-dark)}
+.badge.asset{background:var(--blue-bg);color:var(--blue-dark)}
+.badge.liability{background:var(--amber-bg);color:var(--amber-dark)}
+/* PROFIT */
+.sr{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:.5px solid var(--border)}
+.sr:last-child{border-bottom:none}
+.sl{flex:1;min-width:0}
+.sn{font-size:13px;font-weight:500}
+.pb-bg{height:3px;background:var(--surface2);border-radius:2px;margin-top:4px}
+.pb{height:3px;background:var(--green);border-radius:2px;transition:width .3s}
+.sp-in{width:62px;text-align:right;padding:6px 8px;border:.5px solid var(--border2);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);font-family:var(--ui)}
+.sa{width:120px;text-align:right;font-size:14px;font-weight:600;font-family:var(--font);color:var(--green-dark);flex-shrink:0}
+/* PROGRESS */
+.prg-bg{background:var(--surface2);height:7px;border-radius:4px;overflow:hidden;margin-top:4px}
+.prg{height:7px;border-radius:4px;transition:width .4s}
+/* MISC */
+.sh{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.sh h2{font-size:16px;font-weight:600}
+.ptabs{display:flex;gap:5px}
+.ptabs button{padding:4px 12px;font-size:12px;border:.5px solid var(--border2);border-radius:20px;background:none;cursor:pointer;color:var(--text2);font-family:var(--ui)}
+.ptabs button.active{background:var(--text);color:#fff;border-color:var(--text)}
+.div{border:none;border-top:.5px solid var(--border);margin:12px 0}
+.tr{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-weight:600;font-size:14px}
+.tm{color:var(--text3);font-size:12px}
+.empty{text-align:center;padding:40px 16px;color:var(--text3)}
+.empty i{font-size:38px;margin-bottom:10px;display:block}
+.empty p{font-size:14px;line-height:1.6}
+.eqr{display:flex;align-items:center;gap:10px;font-size:15px;flex-wrap:wrap;padding:4px 0}
+.eqv{font-weight:700;font-family:var(--font)}
+.eqo{color:var(--text3);font-size:18px}
+/* MODAL */
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:100;padding:16px}
+.mb{background:var(--surface);border-radius:var(--rl);padding:24px;max-width:420px;width:100%}
+.mb h3{font-size:17px;margin-bottom:8px;font-family:var(--font)}
+.mb p{font-size:14px;color:var(--text2);line-height:1.6;margin-bottom:16px}
+/* SETUP */
+.sw{max-width:480px;margin:24px auto}
+.sw h2{font-size:22px;font-family:var(--font);margin-bottom:6px}
+.sw .intro{font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.6}
+@media(max-width:520px){
+  .grid2{grid-template-columns:1fr}
+  .full{grid-column:1}
+  .header{padding:12px 14px}
+  .content{padding:10px}
+  .metrics{grid-template-columns:1fr 1fr}
+  .sa{width:90px;font-size:13px}
+}
+</style>
 </head>
 <body>
-  <div class="app" id="app">
-    <div class="splash">
-      <div class="spinner"></div>
-      <p>Loading LedgerLite…</p>
-    </div>
-  </div>
-  <script type="module" src="app.js"></script>
+<div id="app">
+  <div class="splash"><div class="spinner"></div><p>Loading LedgerLite…</p></div>
+</div>
+<script>
+// ════════════════════════════════════════════════
+//  LEDGERLITE — All-in-one. No imports needed.
+// ════════════════════════════════════════════════
+
+// ── PASTE YOUR KEYS HERE ─────────────────────────
+var SUPABASE_URL = https://izoserihhzlhdfaxykhv.supabase.co/rest/v1/
+var SUPABASE_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml6b3NlcmloaHpsaGRmYXh5a2h2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg1Mjc4OTUsImV4cCI6MjA5NDEwMzg5NX0.gCD-05Knw4yGTyZ92H6PKC7Q9HGveVcvOFliDoBOnS0
+// ─────────────────────────────────────────────────
+
+var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
+
+var S = {
+  user: null, tab: 'dashboard', authTab: 'login',
+  transactions: [], currency: '₦', setup: false,
+  pending: null, deleteIdx: null, loading: true,
+  authError: '', authLoading: false, saving: false,
+  summaryPeriod: 'month', profitInput: '',
+  form: { date: td(), desc: '', category: 'income', amount: '', method: 'Bank Transfer', notes: '' },
+  shareConfig: [
+    {name:'Tithe & Offering',pct:10},{name:'Ministry Giving',pct:5},
+    {name:'Charitable Giving',pct:5},{name:'Capital Project Savings',pct:15},
+    {name:'Investment',pct:20},{name:'Operational Funds',pct:30},
+    {name:'Personal Payment',pct:15}
+  ]
+}
+
+function td(){ return new Date().toISOString().slice(0,10) }
+function fmt(n){ return S.currency+Math.abs(Number(n)||0).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:2}) }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') }
+function uid(){ return Date.now()+Math.random().toString(36).slice(2,6) }
+
+// ── INIT ─────────────────────────────────────────
+async function init(){
+  var res = await sb.auth.getSession()
+  if(res.data && res.data.session && res.data.session.user){
+    S.user = res.data.session.user
+    await loadUserData()
+  }
+  S.loading = false
+  render()
+  sb.auth.onAuthStateChange(async function(event, session){
+    S.user = session ? session.user : null
+    if(S.user){ await loadUserData() }
+    else{ S.transactions=[]; S.setup=false; S.currency='₦' }
+    render()
+  })
+}
+
+// ── AUTH ─────────────────────────────────────────
+async function signUp(email, password, name){
+  S.authLoading=true; S.authError=''; render()
+  var r = await sb.auth.signUp({email:email, password:password, options:{data:{full_name:name}}})
+  S.authLoading=false
+  if(r.error){ S.authError=r.error.message; render() }
+}
+async function signIn(email, password){
+  S.authLoading=true; S.authError=''; render()
+  var r = await sb.auth.signInWithPassword({email:email, password:password})
+  S.authLoading=false
+  if(r.error){ S.authError=r.error.message; render() }
+}
+async function signOut(){
+  await sb.auth.signOut()
+  S.user=null; S.setup=false; S.transactions=[]; render()
+}
+
+// ── DATA ─────────────────────────────────────────
+async function loadUserData(){
+  var r1 = await sb.from('transactions').select('*').order('date',{ascending:false})
+  S.transactions = (r1.data||[]).map(function(t){
+    return {id:t.id,date:t.date,desc:t.description,category:t.category,amount:parseFloat(t.amount),method:t.method||'',notes:t.notes||''}
+  })
+  var r2 = await sb.from('user_settings').select('*').eq('user_id',S.user.id).single()
+  if(r2.data){
+    S.currency    = r2.data.currency    || '₦'
+    S.setup       = r2.data.setup_done  || false
+    S.shareConfig = r2.data.share_config|| S.shareConfig
+  }
+}
+
+async function saveTx(tx){
+  S.saving=true; updSave()
+  var r = await sb.from('transactions').insert({
+    user_id:S.user.id, date:tx.date, description:tx.desc,
+    category:tx.category, amount:tx.amount, method:tx.method, notes:tx.notes
+  }).select().single()
+  if(!r.error && r.data){
+    var d=r.data
+    S.transactions.unshift({id:d.id,date:d.date,desc:d.description,category:d.category,amount:parseFloat(d.amount),method:d.method||'',notes:d.notes||''})
+  }
+  S.saving=false; updSave()
+  return r.error
+}
+
+async function delTx(id){
+  S.saving=true; updSave()
+  await sb.from('transactions').delete().eq('id',id)
+  S.transactions = S.transactions.filter(function(t){ return t.id!==id })
+  S.saving=false; updSave()
+}
+
+async function saveSettings(){
+  S.saving=true; updSave()
+  await sb.from('user_settings').upsert({user_id:S.user.id,currency:S.currency,setup_done:S.setup,share_config:S.shareConfig},{onConflict:'user_id'})
+  S.saving=false; updSave()
+}
+
+function updSave(){
+  var el=document.getElementById('save-st')
+  if(!el) return
+  el.textContent = S.saving ? '⏳ Saving…' : '✓ Saved'
+  el.className = 'save-st'+(S.saving?' saving':'')
+}
+
+// ── DERIVED ──────────────────────────────────────
+function derv(){
+  var t=S.transactions
+  var inc=0,exp=0,ast=0,lib=0
+  t.forEach(function(x){
+    if(x.category==='income')      inc+=x.amount
+    if(x.category==='expenditure') exp+=x.amount
+    if(x.category==='asset')       ast+=x.amount
+    if(x.category==='liability')   lib+=x.amount
+  })
+  return {income:inc,expenditure:exp,assets:ast,liabilities:lib,equity:ast-lib,net:inc-exp}
+}
+
+function periodTxs(){
+  var now=new Date()
+  return S.transactions.filter(function(t){
+    var d=new Date(t.date)
+    if(S.summaryPeriod==='week') return (now-d)/86400000<=7
+    return d.getMonth()===now.getMonth() && d.getFullYear()===now.getFullYear()
+  })
+}
+
+// ── RENDER ───────────────────────────────────────
+function render(){
+  var root=document.getElementById('app')
+  if(S.loading){ root.innerHTML='<div class="splash"><div class="spinner"></div><p>Loading LedgerLite…</p></div>'; return }
+  if(!S.user)  { root.innerHTML=buildAuth(); return }
+  if(!S.setup) { root.innerHTML='<div class="app">'+buildHeader()+'<div class="content">'+buildSetup()+'</div></div>'; return }
+  root.innerHTML='<div class="app">'+buildHeader()+buildNav()+'<div class="content">'+(S.pending?buildConfirm():'')+(S.deleteIdx!==null?buildDelModal():'')+buildTab()+'</div></div>'
+}
+
+// ── AUTH SCREEN ───────────────────────────────────
+function buildAuth(){
+  var isL=S.authTab==='login'
+  return '<div class="auth-wrap"><div class="auth-card">'+
+    '<div style="font-size:44px;margin-bottom:12px">📒</div>'+
+    '<h1>LedgerLite</h1><p class="tag">Personal bookkeeping, simply done.<br>Your books. Anywhere. Any device.</p>'+
+    '<div class="auth-tabs">'+
+      '<button class="'+(isL?'active':'')+'" onclick="setAuthTab(\'login\')">Sign In</button>'+
+      '<button class="'+(isL?'':'active')+'" onclick="setAuthTab(\'signup\')">Create Account</button>'+
+    '</div>'+
+    (S.authError?'<div class="alert dngr" style="margin-bottom:14px"><i class="ti ti-alert-circle"></i>'+esc(S.authError)+'</div>':'')+
+    '<div style="display:flex;flex-direction:column;gap:10px">'+
+      (!isL?'<div class="fg"><label>Full Name</label><input type="text" id="a-name" placeholder="Your name"></div>':'')+
+      '<div class="fg"><label>Email Address</label><input type="email" id="a-email" placeholder="you@example.com" onkeydown="if(event.key===\'Enter\')handleAuth()"></div>'+
+      '<div class="fg"><label>Password</label><input type="password" id="a-pw" placeholder="••••••••" onkeydown="if(event.key===\'Enter\')handleAuth()"></div>'+
+      '<button class="btn pri fw" onclick="handleAuth()" '+(S.authLoading?'disabled':'')+' style="margin-top:4px">'+
+        (S.authLoading?'<div class="spinner" style="width:16px;height:16px;border-width:2px"></div> Please wait…':isL?'<i class="ti ti-login"></i> Sign In':'<i class="ti ti-user-plus"></i> Create Account')+
+      '</button>'+
+    '</div>'+
+    (isL?'<p style="font-size:12px;color:var(--text3);text-align:center;margin-top:14px">No account? <a href="#" onclick="setAuthTab(\'signup\');return false" style="color:var(--blue)">Sign up free</a></p>':'')+
+  '</div></div>'
+}
+
+// ── HEADER ───────────────────────────────────────
+function buildHeader(){
+  var d=derv(), warn=S.setup&&d.assets>0&&d.liabilities>d.assets
+  var name=(S.user&&S.user.user_metadata&&S.user.user_metadata.full_name)||((S.user&&S.user.email)||'').split('@')[0]||'You'
+  return '<div class="header">'+
+    '<div style="display:flex;align-items:center;gap:10px"><span style="font-size:24px">📒</span>'+
+    '<div><h1>LedgerLite</h1><div class="sub">Personal Bookkeeping</div></div></div>'+
+    '<div style="display:flex;align-items:center;gap:12px">'+
+      '<span id="save-st" class="save-st">✓ Saved</span>'+
+      (S.setup?'<span style="font-size:20px">'+(warn?'⚠️':'✅')+'</span>':'')+
+      '<span class="cur-badge">'+esc(S.currency)+'</span>'+
+      '<button class="user-btn" onclick="signOut()"><i class="ti ti-logout"></i>'+esc(name.split(' ')[0])+'</button>'+
+    '</div></div>'
+}
+
+// ── NAV ──────────────────────────────────────────
+function buildNav(){
+  var tabs=[
+    {id:'dashboard',icon:'ti-dashboard',label:'Dashboard'},
+    {id:'record',icon:'ti-plus',label:'Record'},
+    {id:'ledger',icon:'ti-list',label:'Ledger'},
+    {id:'summary',icon:'ti-chart-bar',label:'Summary'},
+    {id:'profit',icon:'ti-coin',label:'Profit Share'},
+    {id:'settings',icon:'ti-settings',label:'Settings'}
+  ]
+  return '<nav class="nav">'+tabs.map(function(t){
+    return '<button class="'+(S.tab===t.id?'active':'')+'" onclick="setTab(\''+t.id+'\')"><i class="ti '+t.icon+'" aria-hidden="true"></i>'+t.label+'</button>'
+  }).join('')+'</nav>'
+}
+
+function buildTab(){
+  if(S.tab==='dashboard') return buildDash()
+  if(S.tab==='record')    return buildRecord()
+  if(S.tab==='ledger')    return buildLedger()
+  if(S.tab==='summary')   return buildSummary()
+  if(S.tab==='profit')    return buildProfit()
+  if(S.tab==='settings')  return buildSettingsTab()
+  return buildDash()
+}
+
+// ── SETUP ────────────────────────────────────────
+function buildSetup(){
+  return '<div class="sw"><div style="font-size:48px;margin-bottom:14px">📒</div>'+
+    '<h2>Welcome to LedgerLite</h2>'+
+    '<p class="intro">Let\'s open your books. Takes 30 seconds, done once.</p>'+
+    '<div class="card"><div class="ct">Opening Balances</div>'+
+    '<div style="display:flex;flex-direction:column;gap:12px">'+
+      '<div class="fg"><label>Currency</label><select id="s-cur">'+
+        ['₦ Nigerian Naira|₦','$ US Dollar|$','£ British Pound|£','€ Euro|€','KSh Kenyan Shilling|KSh','GHS Ghana Cedis|GHS','ZAR South African Rand|ZAR'].map(function(c){
+          var p=c.split('|'); return '<option value="'+p[1]+'" '+(S.currency===p[1]?'selected':'')+'>'+p[0]+'</option>'
+        }).join('')+
+      '</select></div>'+
+      '<div class="fg"><label>Total cash &amp; bank balance</label><input type="number" id="s-cash" placeholder="0" min="0" step="0.01"></div>'+
+      '<div class="fg"><label>Other assets — property, equipment, savings…</label><input type="number" id="s-ast" placeholder="0" min="0" step="0.01"></div>'+
+      '<div class="fg"><label>Existing loans &amp; debts</label><input type="number" id="s-lib" placeholder="0" min="0" step="0.01"></div>'+
+      '<button class="btn pri" onclick="doSetup()" style="margin-top:4px"><i class="ti ti-rocket"></i> Open My Books</button>'+
+    '</div></div></div>'
+}
+
+// ── DASHBOARD ────────────────────────────────────
+function buildDash(){
+  var d=derv(), surplus=d.net>=0
+  var alerts=''
+  if(d.assets>0&&d.liabilities>d.assets) alerts+='<div class="alert warn"><i class="ti ti-alert-triangle"></i><div><strong>⚠️ Liabilities exceed Assets.</strong> Your equity is negative.</div></div>'
+  if(d.income>0&&d.net<0) alerts+='<div class="alert dngr"><i class="ti ti-trending-down"></i><div><strong>Deficit:</strong> You have spent more than you have earned.</div></div>'
+  return '<div class="sh"><h2>Financial Overview</h2><span class="tm">'+new Date().toLocaleDateString('en-US',{month:'long',year:'numeric'})+'</span></div>'+
+    alerts+
+    '<div class="metrics">'+
+      metric('Total Income',fmt(d.income),'gc','All money in')+
+      metric('Total Expenditure',fmt(d.expenditure),'rc','All money out')+
+      metric('Net Position',(surplus?'+':'–')+fmt(Math.abs(d.net)),surplus?'gc':'rc',surplus?'✅ Surplus':'❌ Deficit')+
+      metric('Total Assets',fmt(d.assets),'bc','Everything you own')+
+      metric('Liabilities',fmt(d.liabilities),d.liabilities>0?'ac':'bc','What you owe')+
+      metric('Equity',fmt(d.equity),d.equity>=0?'pc':'rc','Assets – Liabilities')+
+    '</div>'+
+    '<div class="card"><div class="ct">Accounting Equation</div>'+
+      '<p style="font-size:12px;color:var(--text3);margin-bottom:10px">Assets = Liabilities + Equity — must always balance.</p>'+
+      '<div class="eqr"><span class="eqv bc">'+fmt(d.assets)+'</span><span class="eqo">=</span><span class="eqv ac">'+fmt(d.liabilities)+'</span><span class="eqo">+</span><span class="eqv pc">'+fmt(d.equity)+'</span><span style="margin-left:auto;font-size:22px">✅</span></div>'+
+    '</div>'+
+    '<div class="card"><div class="ct">Recent Entries</div>'+
+      (S.transactions.length===0
+        ?'<div class="empty"><i class="ti ti-file-text"></i><p>No transactions yet.<br>Go to <strong>Record</strong> to add your first entry.</p></div>'
+        :miniTable(S.transactions.slice(0,6)))+
+      (S.transactions.length>6?'<div style="text-align:center;padding-top:10px"><button class="btn" onclick="setTab(\'ledger\')">View All <i class="ti ti-arrow-right"></i></button></div>':'')+
+    '</div>'
+}
+
+function metric(label,value,cls,sub){
+  return '<div class="metric"><div class="lb">'+label+'</div><div class="val '+cls+'">'+value+'</div><div class="sb">'+sub+'</div></div>'
+}
+
+function miniTable(txs){
+  return '<div class="tw"><table><thead><tr><th>Date</th><th>Description</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead><tbody>'+
+    txs.map(function(t){
+      var c=t.category==='income'?'var(--green-dark)':t.category==='expenditure'?'var(--red)':'var(--text)'
+      return '<tr><td style="color:var(--text3);white-space:nowrap;font-size:12px">'+esc(t.date)+'</td>'+
+        '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.desc)+'</td>'+
+        '<td><span class="badge '+t.category+'">'+t.category+'</span></td>'+
+        '<td style="text-align:right;font-weight:600;white-space:nowrap;color:'+c+'">'+fmt(t.amount)+'</td></tr>'
+    }).join('')+
+  '</tbody></table></div>'
+}
+
+// ── RECORD ───────────────────────────────────────
+function buildRecord(){
+  var f=S.form
+  return '<div class="sh"><h2>Record a Transaction</h2></div>'+
+    '<div class="card"><div class="grid2">'+
+      '<div class="fg"><label>Date</label><input type="date" id="f-date" value="'+esc(f.date)+'"></div>'+
+      '<div class="fg"><label>Category</label><select id="f-cat">'+
+        '<option value="income" '+(f.category==='income'?'selected':'')+'>💰 Income</option>'+
+        '<option value="expenditure" '+(f.category==='expenditure'?'selected':'')+'>💸 Expenditure</option>'+
+        '<option value="asset" '+(f.category==='asset'?'selected':'')+'>🏦 Asset</option>'+
+        '<option value="liability" '+(f.category==='liability'?'selected':'')+'>📋 Liability</option>'+
+      '</select></div>'+
+      '<div class="fg full"><label>Description</label><input type="text" id="f-desc" value="'+esc(f.desc)+'" placeholder="e.g. Client payment, office rent…"></div>'+
+      '<div class="fg"><label>Amount ('+esc(S.currency)+')</label><input type="number" id="f-amt" value="'+esc(f.amount)+'" placeholder="0.00" min="0" step="0.01"></div>'+
+      '<div class="fg"><label>Payment Method</label><select id="f-meth">'+
+        ['Bank Transfer','Cash','Card','Mobile Money','Cheque','Other'].map(function(m){ return '<option '+(f.method===m?'selected':'')+'>'+m+'</option>' }).join('')+
+      '</select></div>'+
+      '<div class="fg full"><label>Notes (optional)</label><textarea id="f-notes" placeholder="Any extra details…">'+esc(f.notes)+'</textarea></div>'+
+    '</div>'+
+    '<div class="btn-row">'+
+      '<button class="btn pri" onclick="prepareEntry()"><i class="ti ti-check"></i> Review &amp; Save</button>'+
+      '<button class="btn" onclick="clearForm()"><i class="ti ti-refresh"></i> Clear</button>'+
+    '</div></div>'+
+    '<div class="card" style="background:var(--blue-bg);border-color:var(--blue)">'+
+      '<div style="font-size:13px;color:var(--blue-dark);line-height:1.75">'+
+        '<strong>💡 Guide</strong><br>'+
+        '<strong>Income</strong> — money received &nbsp;|&nbsp; <strong>Expenditure</strong> — money spent<br>'+
+        '<strong>Asset</strong> — something you own with value &nbsp;|&nbsp; <strong>Liability</strong> — a debt you owe'+
+      '</div></div>'
+}
+
+// ── LEDGER ───────────────────────────────────────
+function buildLedger(){
+  var txs=S.transactions
+  return '<div class="sh"><h2>Full Ledger</h2><span class="tm">'+txs.length+' entr'+(txs.length===1?'y':'ies')+'</span></div>'+
+    (txs.length===0
+      ?'<div class="card"><div class="empty"><i class="ti ti-file-text"></i><p>No transactions yet.</p></div></div>'
+      :'<div class="card"><div class="tw"><table><thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Method</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>'+
+        txs.map(function(t,i){
+          var c=t.category==='income'?'var(--green-dark)':t.category==='expenditure'?'var(--red)':'var(--text)'
+          return '<tr>'+
+            '<td style="white-space:nowrap;font-size:12px;color:var(--text3)">'+esc(t.date)+'</td>'+
+            '<td><div style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.desc)+'</div>'+(t.notes?'<div style="font-size:11px;color:var(--text3)">'+esc(t.notes)+'</div>':'')+
+            '</td><td><span class="badge '+t.category+'">'+t.category+'</span></td>'+
+            '<td style="font-size:12px;color:var(--text3);white-space:nowrap">'+esc(t.method)+'</td>'+
+            '<td style="text-align:right;font-weight:600;white-space:nowrap;color:'+c+'">'+fmt(t.amount)+'</td>'+
+            '<td><button class="btn dan sm" onclick="confirmDel('+i+')" title="Delete"><i class="ti ti-trash"></i></button></td>'+
+          '</tr>'
+        }).join('')+
+      '</tbody></table></div></div>')
+}
+
+// ── SUMMARY ──────────────────────────────────────
+function buildSummary(){
+  var pt=periodTxs(), inc=0, exp=0
+  pt.forEach(function(x){ if(x.category==='income') inc+=x.amount; if(x.category==='expenditure') exp+=x.amount })
+  var net=inc-exp, d=derv(), lbl=S.summaryPeriod==='week'?'This Week':'This Month', maxV=Math.max(d.assets,d.liabilities,1)
+  return '<div class="sh"><h2>Summary</h2><div class="ptabs">'+
+      '<button class="'+(S.summaryPeriod==='week'?'active':'')+'" onclick="setPeriod(\'week\')">Weekly</button>'+
+      '<button class="'+(S.summaryPeriod==='month'?'active':'')+'" onclick="setPeriod(\'month\')">Monthly</button>'+
+    '</div></div>'+
+    '<div class="card"><div class="ct">'+lbl+' — Income vs Expenditure</div>'+
+      '<div class="metrics" style="margin-bottom:10px">'+
+        metric('Income',fmt(inc),'gc','')+metric('Expenditure',fmt(exp),'rc','')+
+        metric('Net',(net>=0?'+':'–')+fmt(Math.abs(net)),net>=0?'gc':'rc','')+
+      '</div>'+
+      '<div class="alert '+(net>=0?'succ':'dngr')+'" style="margin-bottom:0">'+
+        '<i class="ti '+(net>=0?'ti-trending-up':'ti-trending-down')+'"></i>'+
+        '<span>'+(net>=0?'✅ You earned more than you spent '+lbl.toLowerCase()+' — great going!':'❌ You spent more than you earned '+lbl.toLowerCase()+'. Consider reviewing expenses.')+'</span>'+
+      '</div></div>'+
+    '<div class="card"><div class="ct">Balance Sheet — All Time</div>'+
+      [
+        {label:'Total Assets',val:d.assets,color:'var(--blue-dark)',icon:'ti-building-bank'},
+        {label:'Total Liabilities',val:d.liabilities,color:'var(--amber-dark)',icon:'ti-credit-card'},
+        {label:'Equity (Net Worth)',val:d.equity,color:d.equity>=0?'var(--purple-dark)':'var(--red)',icon:'ti-chart-pie'}
+      ].map(function(r){
+        return '<div style="margin-bottom:14px">'+
+          '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">'+
+            '<span style="font-size:13px;color:var(--text2);display:flex;align-items:center;gap:6px"><i class="ti '+r.icon+'" style="font-size:15px"></i>'+r.label+'</span>'+
+            '<span style="font-size:15px;font-weight:700;font-family:var(--font);color:'+r.color+'">'+fmt(r.val)+'</span>'+
+          '</div>'+
+          '<div class="prg-bg"><div class="prg" style="width:'+Math.min(100,Math.max(0,Math.abs(r.val)/maxV*100)).toFixed(1)+'%;background:'+r.color+'"></div></div>'+
+        '</div>'
+      }).join('')+
+      '<div class="div"></div>'+
+      '<div style="font-size:13px;color:var(--text2)">Equity = <strong>'+fmt(d.assets)+'</strong> − <strong>'+fmt(d.liabilities)+'</strong> = <strong style="color:'+(d.equity>=0?'var(--purple-dark)':'var(--red)')+'">'+fmt(d.equity)+'</strong></div>'+
+    '</div>'+
+    '<div class="card"><div class="ct">'+lbl+' — All Entries</div>'+
+      (pt.length===0?'<div class="empty" style="padding:20px"><i class="ti ti-inbox"></i><p>No transactions in this period.</p></div>':miniTable(pt))+
+    '</div>'
+}
+
+// ── PROFIT SHARE ─────────────────────────────────
+function buildProfit(){
+  var total=parseFloat(S.profitInput)||0, sum=0
+  S.shareConfig.forEach(function(x){ sum+=x.pct })
+  var valid=Math.abs(sum-100)<0.01
+  return '<div class="sh"><h2>Profit Share Calculator</h2></div>'+
+    '<div class="card"><div class="ct">Enter Profit Amount</div>'+
+      '<div class="fg"><label>Total Profit ('+esc(S.currency)+')</label>'+
+        '<input type="number" id="profit-in" value="'+esc(S.profitInput)+'" placeholder="e.g. 500000" oninput="onProfitIn(this.value)">'+
+      '</div></div>'+
+    (!valid?'<div class="alert warn"><i class="ti ti-alert-triangle"></i><div><strong>Percentages must add up to 100%.</strong> Currently: '+sum.toFixed(1)+'%. Adjust below.</div></div>':
+     total>0?'<div class="alert succ"><i class="ti ti-check"></i>✅ Percentages add up to 100% — breakdown is ready.</div>':'')+
+    '<div class="card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'+
+        '<div class="ct" style="margin-bottom:0">Allocation</div>'+
+        '<span id="pct-sum" style="font-size:13px;font-weight:700;color:'+(valid?'var(--green-dark)':'var(--red)')+'">'+sum.toFixed(1)+'% / 100%</span>'+
+      '</div>'+
+      S.shareConfig.map(function(s,i){
+        return '<div class="sr">'+
+          '<div class="sl"><div class="sn">'+esc(s.name)+'</div><div class="pb-bg"><div class="pb" id="pb-'+i+'" style="width:'+Math.min(s.pct,100)+'%"></div></div></div>'+
+          '<div style="display:flex;align-items:center;gap:4px;flex-shrink:0">'+
+            '<input type="number" class="sp-in" value="'+s.pct+'" min="0" max="100" step="1" oninput="onShareIn('+i+',this.value)">'+
+            '<span style="font-size:13px;color:var(--text2)">%</span>'+
+          '</div>'+
+          '<div class="sa" id="sa-'+i+'">'+(total>0&&valid?fmt(total*s.pct/100):'—')+'</div>'+
+        '</div>'
+      }).join('')+
+      '<div class="div"></div>'+
+      '<div class="tr"><span>Total</span><span id="s-total" style="font-family:var(--font)">'+(total>0&&valid?fmt(total):esc(S.currency)+'0')+'</span></div>'+
+    '</div>'
+}
+
+// ── SETTINGS ─────────────────────────────────────
+function buildSettingsTab(){
+  var name=(S.user&&S.user.user_metadata&&S.user.user_metadata.full_name)||'—'
+  var email=(S.user&&S.user.email)||'—'
+  return '<div class="sh"><h2>Settings</h2></div>'+
+    '<div class="card"><div class="ct">Your Account</div>'+
+      '<div style="font-size:13px;color:var(--text2);line-height:2"><strong>Name:</strong> '+esc(name)+'<br><strong>Email:</strong> '+esc(email)+'</div>'+
+      '<div class="btn-row"><button class="btn dan" onclick="signOut()"><i class="ti ti-logout"></i> Sign Out</button></div>'+
+    '</div>'+
+    '<div class="card"><div class="ct">Currency</div>'+
+      '<div class="fg"><label>Currency Symbol</label><select onchange="changeCur(this.value)">'+
+        ['₦','$','£','€','KSh','GHS','ZAR'].map(function(c){ return '<option '+(S.currency===c?'selected':'')+'>'+c+'</option>' }).join('')+
+      '</select></div></div>'+
+    '<div class="card"><div class="ct">Data &amp; Backup</div>'+
+      '<p style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.6">Your data is saved to the cloud automatically. Export a CSV backup whenever you like.</p>'+
+      '<div class="btn-row">'+
+        '<button class="btn" onclick="exportCSV()"><i class="ti ti-download"></i> Export CSV</button>'+
+        '<button class="btn dan" onclick="clearAll()"><i class="ti ti-trash"></i> Clear All</button>'+
+      '</div></div>'+
+    '<div class="card"><div class="ct">Reset Setup</div>'+
+      '<button class="btn" onclick="resetSetup()"><i class="ti ti-rotate"></i> Run Setup Again</button>'+
+    '</div>'
+}
+
+// ── MODALS ───────────────────────────────────────
+function buildConfirm(){
+  var p=S.pending
+  return '<div class="mo" onclick="cancelPend()"><div class="mb" onclick="event.stopPropagation()">'+
+    '<h3>Confirm Entry</h3>'+
+    '<p>📅 <strong>'+esc(p.date)+'</strong><br>📝 <strong>'+esc(p.desc)+'</strong><br>'+
+    '🏷️ Category: <strong>'+esc(p.category)+'</strong><br>💰 Amount: <strong>'+fmt(p.amount)+'</strong><br>'+
+    '💳 Via: <strong>'+esc(p.method)+'</strong>'+(p.notes?'<br>📌 '+esc(p.notes):'')+
+    '<br><br>Is that correct?</p>'+
+    '<div class="btn-row"><button class="btn pri" onclick="saveEntry()"><i class="ti ti-check"></i> Yes, Save It</button>'+
+    '<button class="btn" onclick="cancelPend()"><i class="ti ti-edit"></i> Edit</button></div>'+
+  '</div></div>'
+}
+
+function buildDelModal(){
+  var t=S.transactions[S.deleteIdx]
+  if(!t) return ''
+  return '<div class="mo" onclick="S.deleteIdx=null;render()"><div class="mb" onclick="event.stopPropagation()">'+
+    '<h3>Delete Entry?</h3>'+
+    '<p>Remove <strong>'+esc(t.desc)+'</strong> ('+fmt(t.amount)+') from '+esc(t.date)+'?<br>This cannot be undone.</p>'+
+    '<div class="btn-row"><button class="btn dan" onclick="doDel()"><i class="ti ti-trash"></i> Delete</button>'+
+    '<button class="btn" onclick="S.deleteIdx=null;render()">Cancel</button></div>'+
+  '</div></div>'
+}
+
+// ── ACTIONS ──────────────────────────────────────
+function setTab(t){ syncForm(); S.tab=t; render() }
+function setPeriod(p){ S.summaryPeriod=p; render() }
+function setAuthTab(t){ S.authTab=t; S.authError=''; render() }
+
+async function handleAuth(){
+  var email=(document.getElementById('a-email')||{}).value||''
+  var pw=(document.getElementById('a-pw')||{}).value||''
+  var name=(document.getElementById('a-name')||{}).value||''
+  if(!email.trim()||!pw){ S.authError='Please enter your email and password.'; render(); return }
+  if(S.authTab==='signup') await signUp(email.trim(),pw,name.trim())
+  else await signIn(email.trim(),pw)
+}
+
+async function doSetup(){
+  var cur=document.getElementById('s-cur').value
+  var cash=parseFloat(document.getElementById('s-cash').value)||0
+  var ast=parseFloat(document.getElementById('s-ast').value)||0
+  var lib=parseFloat(document.getElementById('s-lib').value)||0
+  S.currency=cur; S.setup=true
+  var d=td()
+  if(cash>0) await saveTx({date:d,desc:'Opening cash / bank balance',category:'asset',amount:cash,method:'Opening Balance',notes:'Setup'})
+  if(ast>0)  await saveTx({date:d,desc:'Opening other assets',category:'asset',amount:ast,method:'Opening Balance',notes:'Setup'})
+  if(lib>0)  await saveTx({date:d,desc:'Opening liabilities / loans',category:'liability',amount:lib,method:'Opening Balance',notes:'Setup'})
+  await saveSettings()
+  render()
+}
+
+function syncForm(){
+  var g=function(id){ var el=document.getElementById(id); return el?el.value:null }
+  if(g('f-date')===null) return
+  S.form={date:g('f-date')||td(),desc:g('f-desc')||'',category:g('f-cat')||'income',amount:g('f-amt')||'',method:g('f-meth')||'Bank Transfer',notes:g('f-notes')||''}
+}
+
+function prepareEntry(){
+  syncForm()
+  var f=S.form
+  if(!f.desc.trim()){ alert('Please add a description.'); return }
+  if(!f.amount||isNaN(parseFloat(f.amount))||+f.amount<=0){ alert('Please enter a valid amount greater than zero.'); return }
+  S.pending={date:f.date,desc:f.desc,category:f.category,amount:parseFloat(f.amount),method:f.method,notes:f.notes}
+  render()
+}
+
+async function saveEntry(){
+  if(!S.pending) return
+  var err=await saveTx(S.pending)
+  if(err){ alert('Could not save: '+err.message); return }
+  S.pending=null
+  S.form={date:td(),desc:'',category:'income',amount:'',method:'Bank Transfer',notes:''}
+  S.tab='dashboard'; render()
+}
+
+function cancelPend(){ syncForm(); S.pending=null; render() }
+function clearForm(){ S.form={date:td(),desc:'',category:'income',amount:'',method:'Bank Transfer',notes:''}; render() }
+function confirmDel(i){ S.deleteIdx=i; render() }
+
+async function doDel(){
+  if(S.deleteIdx===null) return
+  await delTx(S.transactions[S.deleteIdx].id)
+  S.deleteIdx=null; render()
+}
+
+function onProfitIn(v){
+  S.profitInput=v
+  var total=parseFloat(v)||0, sum=0
+  S.shareConfig.forEach(function(x){ sum+=x.pct })
+  var valid=Math.abs(sum-100)<0.01
+  S.shareConfig.forEach(function(s,i){
+    var el=document.getElementById('sa-'+i)
+    if(el) el.textContent=total>0&&valid?fmt(total*s.pct/100):'—'
+  })
+  var tot=document.getElementById('s-total')
+  if(tot) tot.textContent=total>0&&valid?fmt(total):S.currency+'0'
+}
+
+function onShareIn(i,v){
+  S.shareConfig[i].pct=parseFloat(v)||0
+  var sum=0; S.shareConfig.forEach(function(x){ sum+=x.pct })
+  var valid=Math.abs(sum-100)<0.01
+  var sumEl=document.getElementById('pct-sum')
+  if(sumEl){ sumEl.textContent=sum.toFixed(1)+'% / 100%'; sumEl.style.color=valid?'var(--green-dark)':'var(--red)' }
+  var bar=document.getElementById('pb-'+i)
+  if(bar) bar.style.width=Math.min(S.shareConfig[i].pct,100)+'%'
+  var total=parseFloat(S.profitInput)||0
+  S.shareConfig.forEach(function(s,j){
+    var el=document.getElementById('sa-'+j)
+    if(el) el.textContent=total>0&&valid?fmt(total*s.pct/100):'—'
+  })
+  var tot=document.getElementById('s-total')
+  if(tot) tot.textContent=total>0&&valid?fmt(total):S.currency+'0'
+  saveSettings()
+}
+
+async function changeCur(v){ S.currency=v; await saveSettings(); render() }
+
+async function resetSetup(){
+  if(confirm('Run setup again? Your existing transactions will be kept.')){ S.setup=false; await saveSettings(); render() }
+}
+
+async function clearAll(){
+  if(confirm('Delete ALL transactions? This cannot be undone.')){
+    S.saving=true; updSave()
+    await sb.from('transactions').delete().eq('user_id',S.user.id)
+    S.transactions=[]; S.saving=false; updSave(); render()
+  }
+}
+
+function exportCSV(){
+  var rows=[['Date','Description','Category','Amount','Method','Notes']]
+  S.transactions.forEach(function(t){ rows.push([t.date,t.desc,t.category,t.amount,t.method||'',t.notes||'']) })
+  var csv=rows.map(function(r){ return r.map(function(c){ return '"'+String(c).replace(/"/g,'""')+'"' }).join(',') }).join('\r\n')
+  var a=Object.assign(document.createElement('a'),{href:URL.createObjectURL(new Blob([csv],{type:'text/csv'})),download:'LedgerLite-'+td()+'.csv'})
+  document.body.appendChild(a); a.click(); document.body.removeChild(a)
+}
+
+init()
+</script>
 </body>
 </html>

@@ -9,6 +9,115 @@
 <!-- Supabase loaded as a plain script — no import/module needed -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <!-- SheetJS for reading Excel files -->
+// Required: SheetJS included in HTML:
+// <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+const EXPECTED_HEADERS = ['Date','Description','Reference','Debit','Credit','Balance'];
+
+function parseNumberOrNull(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  const num = Number(String(value).toString().replace(/,/g, ''));
+  return Number.isFinite(num) ? num : null;
+}
+
+function parseDateToISO(value) {
+  if (value === null || value === undefined || String(value).trim() === '') return null;
+  // SheetJS may give JS Date objects for Excel dates; handle those first
+  if (value instanceof Date && !isNaN(value)) return value.toISOString();
+  // Try to parse strings (common formats)
+  const d = new Date(String(value));
+  return isNaN(d) ? null : d.toISOString();
+}
+
+function validateHeaders(sheet) {
+  // Read first row headers using sheet_to_json with header:1
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  if (!rows || rows.length === 0) return false;
+  const headerRow = rows[0].map(h => String(h).trim());
+  if (headerRow.length < EXPECTED_HEADERS.length) return false;
+  // Compare first N columns exactly (case sensitive as requested). If you want case-insensitive use .toLowerCase()
+  for (let i = 0; i < EXPECTED_HEADERS.length; i++) {
+    if (headerRow[i] !== EXPECTED_HEADERS[i]) return false;
+  }
+  return true;
+}
+
+function sheetToStructuredObjects(sheet) {
+  // Convert sheet to JSON using header row as keys (header:1 then map)
+  const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+  const headerRow = rows[0].map(h => String(h).trim());
+  const dataRows = rows.slice(1);
+  const results = [];
+
+  dataRows.forEach((row, rowIndex) => {
+    // If the entire row is empty, skip
+    const allEmpty = EXPECTED_HEADERS.every((_, ci) => {
+      const v = row[ci];
+      return v === '' || v === null || v === undefined;
+    });
+    if (allEmpty) return;
+
+    const obj = {};
+    EXPECTED_HEADERS.forEach((key, ci) => {
+      const raw = row[ci] === undefined ? '' : row[ci];
+      switch (key) {
+        case 'Date':
+          obj.Date = parseDateToISO(raw);
+          break;
+        case 'Debit':
+        case 'Credit':
+        case 'Balance':
+          obj[key] = parseNumberOrNull(raw);
+          break;
+        default:
+          obj[key] = raw === null ? '' : String(raw);
+      }
+    });
+    // optional: attach original row index (useful for debugging)
+    obj._row = rowIndex + 2; // +2 because we skipped header and rows are 1-based in Excel
+    results.push(obj);
+  });
+
+  return results;
+}
+
+// Main import handler - call with File object
+async function importExcelFile(file) {
+  if (!file) throw new Error('No file provided');
+  const arrayBuffer = await file.arrayBuffer();
+  const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+  const firstSheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[firstSheetName];
+
+  // Validate headers
+  const ok = validateHeaders(sheet);
+  if (!ok) {
+    throw new Error('Invalid headers. Expected exact headers: ' + EXPECTED_HEADERS.join(', '));
+  }
+
+  // Parse to structured objects
+  const data = sheetToStructuredObjects(sheet);
+  return data; // array of objects with keys Date, Description, Reference, Debit, Credit, Balance
+}
+
+// Example wiring to HTML elements
+document.getElementById('import-btn').addEventListener('click', async () => {
+  const input = document.getElementById('file-input');
+  if (!input.files || input.files.length === 0) {
+    alert('Please choose a file first');
+    return;
+  }
+  const file = input.files[0];
+  try {
+    const imported = await importExcelFile(file);
+    console.log('Imported rows:', imported.length);
+    console.log(imported);
+    alert('Imported ' + imported.length + ' rows (check console)');
+    // TODO: send `imported` to your backend or process as needed
+  } catch (err) {
+    alert('Import error: ' + err.message);
+  }
+});
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}

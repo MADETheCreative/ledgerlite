@@ -165,7 +165,7 @@ var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 var S = {
   user: null, tab: 'dashboard', authTab: 'login',
   transactions: [], currency: '₦', setup: false,
-  pending: null, deleteIdx: null, editIdx: null, loading: true,
+  pending: null, deleteIdx: null, editIdx: null, loading: true, importRows: null, importError: '',
   authError: '', authLoading: false, saving: false,
   summaryPeriod: 'month', profitInput: '',
   form: { date: td(), desc: '', category: 'income', amount: '', method: 'Bank Transfer', notes: '' },
@@ -354,6 +354,7 @@ function buildNav(){
   var tabs=[
     {id:'dashboard',icon:'ti-dashboard',label:'Dashboard'},
     {id:'record',icon:'ti-plus',label:'Record'},
+    {id:'import',icon:'ti-file-import',label:'Import'},
     {id:'ledger',icon:'ti-list',label:'Ledger'},
     {id:'summary',icon:'ti-chart-bar',label:'Summary'},
     {id:'profit',icon:'ti-coin',label:'Profit Share'},
@@ -367,6 +368,7 @@ function buildNav(){
 function buildTab(){
   if(S.tab==='dashboard') return buildDash()
   if(S.tab==='record')    return buildRecord()
+  if(S.tab==='import')    return buildImport()
   if(S.tab==='ledger')    return buildLedger()
   if(S.tab==='summary')   return buildSummary()
   if(S.tab==='profit')    return buildProfit()
@@ -561,7 +563,270 @@ function buildProfit(){
     '</div>'
 }
 
-// ── SETTINGS ─────────────────────────────────────
+// ── IMPORT STATEMENT ─────────────────────────────
+function buildImport(){
+  // Step 1: no file parsed yet — show upload screen
+  if(!S.importRows){
+    return '<div class="sh"><h2>Import Bank Statement</h2></div>'+
+      (S.importError?'<div class="alert dngr"><i class="ti ti-alert-circle"></i>'+esc(S.importError)+'</div>':'')+
+      '<div class="card">'+
+        '<div class="ct">Upload HTML Bank Statement</div>'+
+        '<p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px">'+
+          'Export your bank statement as an <strong>HTML file</strong> from your bank\'s internet banking portal, then upload it here.<br><br>'+
+          '✅ Credits (money in) will be marked as <strong>Income</strong><br>'+
+          '✅ Debits (money out) will be marked as <strong>Expenditure</strong><br>'+
+          '✅ You can correct any category before saving'+
+        '</p>'+
+        '<div style="border:2px dashed var(--border2);border-radius:var(--r);padding:32px 16px;text-align:center;cursor:pointer;background:var(--bg)" onclick="document.getElementById(\'stmt-file\').click()">'+
+          '<i class="ti ti-file-upload" style="font-size:36px;color:var(--text3);display:block;margin-bottom:8px"></i>'+
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">Click to choose your HTML file</div>'+
+          '<div style="font-size:12px;color:var(--text3)">or drag and drop it here</div>'+
+        '</div>'+
+        '<input type="file" id="stmt-file" accept=".html,.htm" style="display:none" onchange="handleFileUpload(this)">'+
+        '<div class="btn-row" style="margin-top:16px">'+
+          '<button class="btn pri" onclick="document.getElementById(\'stmt-file\').click()"><i class="ti ti-upload"></i> Choose File</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="card" style="background:var(--blue-bg);border-color:var(--blue)">'+
+        '<div style="font-size:13px;color:var(--blue-dark);line-height:1.8">'+
+          '<strong>💡 How to export as HTML from common Nigerian banks</strong><br>'+
+          '<strong>GTBank:</strong> Internet Banking → Accounts → Statement → Download → HTML<br>'+
+          '<strong>Access Bank:</strong> Online Banking → Account Statement → Export → Web Page<br>'+
+          '<strong>Zenith:</strong> E-Banking → Statement Request → Format: HTML<br>'+
+          '<strong>Others:</strong> Look for "Download", "Export" or "Print" on your statement page, then choose HTML or Web Page format'+
+        '</div>'+
+      '</div>'
+  }
+
+  // Step 2: file parsed — show preview table for review
+  var rows=S.importRows
+  var skipped=rows.filter(function(r){ return r.skip }).length
+  var toImport=rows.filter(function(r){ return !r.skip })
+  return '<div class="sh"><h2>Review &amp; Confirm Import</h2></div>'+
+    '<div class="alert info"><i class="ti ti-info-circle"></i>'+
+      '<div>Found <strong>'+rows.length+' transactions</strong>. '+
+      (skipped>0?'<strong>'+skipped+' skipped</strong> (duplicates or unreadable). ':'')+
+      'Review categories below and correct any that are wrong, then click <strong>Save All to Ledger</strong>.</div>'+
+    '</div>'+
+    '<div class="card">'+
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">'+
+        '<div class="ct" style="margin-bottom:0">'+toImport.length+' entries to import</div>'+
+        '<div style="display:flex;gap:8px">'+
+          '<button class="btn" onclick="S.importRows=null;S.importError=\'\';render()"><i class="ti ti-refresh"></i> Start Over</button>'+
+          '<button class="btn pri" onclick="saveImport()"><i class="ti ti-check"></i> Save All to Ledger</button>'+
+        '</div>'+
+      '</div>'+
+      '<div class="tw"><table>'+
+        '<thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th><th>Category</th><th>Skip?</th></tr></thead>'+
+        '<tbody>'+
+          rows.map(function(r,i){
+            var amtColor=r.category==='income'?'var(--green-dark)':'var(--red)'
+            return '<tr style="'+(r.skip?'opacity:0.4':'')+'">'+
+              '<td style="white-space:nowrap;font-size:12px;color:var(--text3)">'+esc(r.date)+'</td>'+
+              '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px">'+esc(r.desc)+'</td>'+
+              '<td style="text-align:right;font-weight:600;white-space:nowrap;color:'+amtColor+'">'+fmt(r.amount)+'</td>'+
+              '<td><select class="imp-cat" data-i="'+i+'" onchange="impCatChange('+i+',this.value)" style="font-size:12px;padding:4px 6px;border:.5px solid var(--border2);border-radius:6px;background:var(--bg);font-family:var(--ui)">'+
+                ['income','expenditure','asset','liability'].map(function(c){
+                  return '<option value="'+c+'" '+(r.category===c?'selected':'')+'>'+c+'</option>'
+                }).join('')+
+              '</select></td>'+
+              '<td style="text-align:center"><input type="checkbox" '+(r.skip?'checked':'')+' onchange="impSkipChange('+i+',this.checked)" style="width:16px;height:16px;cursor:pointer"></td>'+
+            '</tr>'
+          }).join('')+
+        '</tbody>'+
+      '</table></div>'+
+    '</div>'
+}
+
+// ── IMPORT LOGIC ─────────────────────────────────
+function handleFileUpload(input){
+  var file=input.files[0]
+  if(!file){ return }
+  if(!file.name.match(/\.html?$/i)){
+    S.importError='Please upload an HTML file (.html or .htm).'
+    S.importRows=null; render(); return
+  }
+  var reader=new FileReader()
+  reader.onload=function(e){
+    try{
+      var html=e.target.result
+      var rows=parseStatementHTML(html)
+      if(!rows||rows.length===0){
+        S.importError='Could not find any transactions in this file. Make sure it is an HTML bank statement with a transactions table.'
+        S.importRows=null; render(); return
+      }
+      S.importError=''
+      S.importRows=rows
+      render()
+    }catch(err){
+      S.importError='Could not read this file: '+err.message
+      S.importRows=null; render()
+    }
+  }
+  reader.readAsText(file)
+}
+
+function parseStatementHTML(html){
+  // Parse the HTML string into a DOM we can query
+  var parser=new DOMParser()
+  var doc=parser.parseFromString(html,'text/html')
+  var rows=[]
+
+  // Find all tables in the document
+  var tables=doc.querySelectorAll('table')
+  if(!tables.length) throw new Error('No tables found in this HTML file.')
+
+  // Pick the table with the most rows — that's almost certainly the transactions table
+  var bestTable=null, bestCount=0
+  tables.forEach(function(tbl){
+    var count=tbl.querySelectorAll('tr').length
+    if(count>bestCount){ bestCount=count; bestTable=tbl }
+  })
+  if(!bestTable) throw new Error('Could not identify a transactions table.')
+
+  // Read header row to figure out which column is which
+  var headerRow=bestTable.querySelector('tr')
+  if(!headerRow) throw new Error('Table has no header row.')
+  var headers=[]
+  headerRow.querySelectorAll('th,td').forEach(function(cell){
+    headers.push(cell.textContent.trim().toLowerCase())
+  })
+
+  // Map column names to indices — covers common Nigerian bank formats
+  var colDate=-1, colDesc=-1, colDebit=-1, colCredit=-1, colAmt=-1, colBal=-1
+  headers.forEach(function(h,i){
+    if(colDate<0  && /date/i.test(h))                           colDate=i
+    if(colDesc<0  && /desc|narr|detail|particular|ref|remark/i.test(h)) colDesc=i
+    if(colDebit<0 && /debit|dr|withdrawal|out/i.test(h))        colDebit=i
+    if(colCredit<0&& /credit|cr|deposit|in/i.test(h))           colCredit=i
+    if(colAmt<0   && /amount|amt/i.test(h) && colDebit<0 && colCredit<0) colAmt=i
+    if(colBal<0   && /balance|bal/i.test(h))                    colBal=i
+  })
+
+  // If we still can't identify columns, try positional fallback (date, desc, debit, credit, balance)
+  if(colDate<0 && headers.length>=2) colDate=0
+  if(colDesc<0 && headers.length>=2) colDesc=1
+  if(colDebit<0 && colCredit<0 && colAmt<0){
+    if(headers.length>=4){ colDebit=2; colCredit=3 }
+    else if(headers.length>=3){ colAmt=2 }
+  }
+
+  // Process data rows (skip header)
+  var dataRows=bestTable.querySelectorAll('tr')
+  dataRows.forEach(function(row,rowIdx){
+    if(rowIdx===0) return // skip header
+    var cells=row.querySelectorAll('td,th')
+    if(cells.length<2) return
+
+    var get=function(i){ return i>=0&&i<cells.length ? cells[i].textContent.trim() : '' }
+
+    var dateStr  = colDate>=0  ? get(colDate)  : ''
+    var descStr  = colDesc>=0  ? get(colDesc)  : ''
+    var debitStr = colDebit>=0 ? get(colDebit) : ''
+    var creditStr= colCredit>=0? get(colCredit): ''
+    var amtStr   = colAmt>=0   ? get(colAmt)   : ''
+
+    // Skip blank rows and balance-only rows
+    if(!dateStr && !descStr) return
+
+    // Parse amount — strip currency symbols, commas, spaces
+    function parseAmt(s){ return parseFloat(s.replace(/[₦$£€,\s]/g,'').replace(/[()]/g,''))||0 }
+
+    var debit =parseAmt(debitStr)
+    var credit=parseAmt(creditStr)
+    var amt   =parseAmt(amtStr)
+
+    // Determine amount and category
+    var finalAmt=0, category='expenditure'
+    if(colCredit>=0||colDebit>=0){
+      if(credit>0){ finalAmt=credit; category='income' }
+      else if(debit>0){ finalAmt=debit; category='expenditure' }
+      else return // blank row
+    } else if(amt>0){
+      finalAmt=amt
+      // Try to infer direction from description keywords
+      var dl=descStr.toLowerCase()
+      if(/salary|credit|receipt|transfer in|lodg|deposit|inflow/i.test(dl)) category='income'
+      else category='expenditure'
+    } else {
+      return // no amount, skip
+    }
+
+    // Parse date — try common formats: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, DD MMM YYYY
+    var parsedDate=parseDate(dateStr)
+    if(!parsedDate) return // can't parse date, skip
+
+    rows.push({
+      date: parsedDate,
+      desc: descStr || 'Bank transaction',
+      amount: finalAmt,
+      category: category,
+      method: 'Bank Statement Import',
+      notes: '',
+      skip: false
+    })
+  })
+
+  return rows
+}
+
+function parseDate(s){
+  if(!s) return null
+  s=s.trim()
+  // YYYY-MM-DD
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+  // DD/MM/YYYY or DD-MM-YYYY
+  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
+  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')
+  // DD MMM YYYY e.g. 12 Jan 2024
+  var months={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'}
+  var m2=s.match(/^(\d{1,2})[- ]([a-zA-Z]{3})[- ](\d{4})$/)
+  if(m2){ var mo=months[m2[2].toLowerCase()]; if(mo) return m2[3]+'-'+mo+'-'+m2[1].padStart(2,'0') }
+  // MMM DD YYYY e.g. Jan 12 2024
+  var m3=s.match(/^([a-zA-Z]{3})[- ](\d{1,2})[,\s]+(\d{4})$/)
+  if(m3){ var mo2=months[m3[1].toLowerCase()]; if(mo2) return m3[3]+'-'+mo2+'-'+m3[2].padStart(2,'0') }
+  // Try native Date parse as last resort
+  var d=new Date(s)
+  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10)
+  return null
+}
+
+function impCatChange(i, val){
+  if(S.importRows&&S.importRows[i]) S.importRows[i].category=val
+}
+
+function impSkipChange(i, checked){
+  if(S.importRows&&S.importRows[i]) S.importRows[i].skip=checked
+  // update opacity live without full re-render
+  var rows=document.querySelectorAll('tbody tr')
+  if(rows[i]) rows[i].style.opacity=checked?'0.4':'1'
+}
+
+async function saveImport(){
+  if(!S.importRows) return
+  var toSave=S.importRows.filter(function(r){ return !r.skip })
+  if(!toSave.length){ alert('No entries selected to import.'); return }
+
+  S.saving=true; updSave()
+  var saved=0, failed=0
+  for(var i=0;i<toSave.length;i++){
+    var r=toSave[i]
+    var res=await sb.from('transactions').insert({
+      user_id:S.user.id, date:r.date, description:r.desc,
+      category:r.category, amount:r.amount, method:r.method, notes:r.notes
+    }).select().single()
+    if(!res.error&&res.data){
+      var d=res.data
+      S.transactions.unshift({id:d.id,date:d.date,desc:d.description,category:d.category,amount:parseFloat(d.amount),method:d.method||'',notes:d.notes||''})
+      saved++
+    } else { failed++ }
+  }
+  S.saving=false; updSave()
+  S.importRows=null; S.importError=''
+  S.tab='ledger'
+  render()
+  if(failed>0) alert(saved+' entries saved. '+failed+' could not be saved — you can add those manually.')
+}
 function buildSettingsTab(){
   var name=(S.user&&S.user.user_metadata&&S.user.user_metadata.full_name)||'—'
   var email=(S.user&&S.user.email)||'—'

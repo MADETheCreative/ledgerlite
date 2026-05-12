@@ -8,6 +8,8 @@
 <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" rel="stylesheet">
 <!-- Supabase loaded as a plain script — no import/module needed -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<!-- SheetJS for reading Excel files -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -570,30 +572,31 @@ function buildImport(){
     return '<div class="sh"><h2>Import Bank Statement</h2></div>'+
       (S.importError?'<div class="alert dngr"><i class="ti ti-alert-circle"></i>'+esc(S.importError)+'</div>':'')+
       '<div class="card">'+
-        '<div class="ct">Upload HTML Bank Statement</div>'+
+        '<div class="ct">Upload Bank Statement</div>'+
         '<p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px">'+
-          'Export your bank statement as an <strong>HTML file</strong> from your bank\'s internet banking portal, then upload it here.<br><br>'+
-          '✅ Credits (money in) will be marked as <strong>Income</strong><br>'+
-          '✅ Debits (money out) will be marked as <strong>Expenditure</strong><br>'+
-          '✅ You can correct any category before saving'+
+          'Upload your bank statement as an <strong>Excel (.xlsx / .xls)</strong> or <strong>HTML</strong> file.<br><br>'+
+          '✅ Credits (money in) → <strong>Income</strong><br>'+
+          '✅ Debits (money out) → <strong>Expenditure</strong><br>'+
+          '✅ Review and correct any category before saving'+
         '</p>'+
         '<div style="border:2px dashed var(--border2);border-radius:var(--r);padding:32px 16px;text-align:center;cursor:pointer;background:var(--bg)" onclick="document.getElementById(\'stmt-file\').click()">'+
-          '<i class="ti ti-file-upload" style="font-size:36px;color:var(--text3);display:block;margin-bottom:8px"></i>'+
-          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">Click to choose your HTML file</div>'+
-          '<div style="font-size:12px;color:var(--text3)">or drag and drop it here</div>'+
+          '<i class="ti ti-file-spreadsheet" style="font-size:36px;color:var(--text3);display:block;margin-bottom:8px"></i>'+
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">Click to choose your statement file</div>'+
+          '<div style="font-size:12px;color:var(--text3)">.xlsx, .xls, .html or .htm</div>'+
         '</div>'+
-        '<input type="file" id="stmt-file" accept=".html,.htm" style="display:none" onchange="handleFileUpload(this)">'+
+        '<input type="file" id="stmt-file" accept=".xlsx,.xls,.html,.htm" style="display:none" onchange="handleFileUpload(this)">'+
         '<div class="btn-row" style="margin-top:16px">'+
           '<button class="btn pri" onclick="document.getElementById(\'stmt-file\').click()"><i class="ti ti-upload"></i> Choose File</button>'+
         '</div>'+
       '</div>'+
       '<div class="card" style="background:var(--blue-bg);border-color:var(--blue)">'+
         '<div style="font-size:13px;color:var(--blue-dark);line-height:1.8">'+
-          '<strong>💡 How to export as HTML from common Nigerian banks</strong><br>'+
-          '<strong>GTBank:</strong> Internet Banking → Accounts → Statement → Download → HTML<br>'+
-          '<strong>Access Bank:</strong> Online Banking → Account Statement → Export → Web Page<br>'+
-          '<strong>Zenith:</strong> E-Banking → Statement Request → Format: HTML<br>'+
-          '<strong>Others:</strong> Look for "Download", "Export" or "Print" on your statement page, then choose HTML or Web Page format'+
+          '<strong>💡 How to export from your bank</strong><br>'+
+          '<strong>GTBank:</strong> Internet Banking → Accounts → Statement → Download → Excel<br>'+
+          '<strong>Access Bank:</strong> Online Banking → Account Statement → Export → Excel<br>'+
+          '<strong>Zenith:</strong> E-Banking → Statement Request → Format: Excel<br>'+
+          '<strong>UBA:</strong> Mobile/Internet Banking → Statements → Download Excel<br>'+
+          '<strong>Others:</strong> Look for "Download", "Export" on your statement page and choose Excel or HTML'+
         '</div>'+
       '</div>'
   }
@@ -642,28 +645,142 @@ function buildImport(){
 function handleFileUpload(input){
   var file=input.files[0]
   if(!file){ return }
-  if(!file.name.match(/\.html?$/i)){
-    S.importError='Please upload an HTML file (.html or .htm).'
+  var isExcel=/\.(xlsx|xls)$/i.test(file.name)
+  var isHTML=/\.html?$/i.test(file.name)
+  if(!isExcel && !isHTML){
+    S.importError='Please upload an Excel (.xlsx/.xls) or HTML (.html/.htm) file.'
     S.importRows=null; render(); return
   }
   var reader=new FileReader()
-  reader.onload=function(e){
-    try{
-      var html=e.target.result
-      var rows=parseStatementHTML(html)
-      if(!rows||rows.length===0){
-        S.importError='Could not find any transactions in this file. Make sure it is an HTML bank statement with a transactions table.'
-        S.importRows=null; render(); return
+  if(isExcel){
+    reader.onload=function(e){
+      try{
+        var data=new Uint8Array(e.target.result)
+        var workbook=XLSX.read(data,{type:'array',cellDates:true})
+        // Use the first sheet
+        var sheetName=workbook.SheetNames[0]
+        var sheet=workbook.Sheets[sheetName]
+        // Convert to array of arrays
+        var raw=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''})
+        var rows=parseStatementRows(raw)
+        if(!rows||rows.length===0){
+          S.importError='Could not find any transactions in this Excel file. Make sure it contains a transactions sheet with Date, Description and Amount columns.'
+          S.importRows=null; render(); return
+        }
+        S.importError=''; S.importRows=rows; render()
+      }catch(err){
+        S.importError='Could not read this Excel file: '+err.message
+        S.importRows=null; render()
       }
-      S.importError=''
-      S.importRows=rows
-      render()
-    }catch(err){
-      S.importError='Could not read this file: '+err.message
-      S.importRows=null; render()
     }
+    reader.readAsArrayBuffer(file)
+  } else {
+    reader.onload=function(e){
+      try{
+        var html=e.target.result
+        var rows=parseStatementHTML(html)
+        if(!rows||rows.length===0){
+          S.importError='Could not find any transactions in this file. Make sure it is an HTML bank statement with a transactions table.'
+          S.importRows=null; render(); return
+        }
+        S.importError=''; S.importRows=rows; render()
+      }catch(err){
+        S.importError='Could not read this file: '+err.message
+        S.importRows=null; render()
+      }
+    }
+    reader.readAsText(file)
   }
-  reader.readAsText(file)
+}
+
+// Parse Excel rows (array of arrays from SheetJS)
+function parseStatementRows(raw){
+  if(!raw||raw.length<2) throw new Error('Not enough rows in this file.')
+
+  // Find the header row — look for a row containing "date"
+  var headerRowIdx=0
+  for(var i=0;i<Math.min(raw.length,10);i++){
+    var rowStr=raw[i].join(' ').toLowerCase()
+    if(/date/.test(rowStr)){ headerRowIdx=i; break }
+  }
+
+  var headers=raw[headerRowIdx].map(function(h){ return String(h).trim().toLowerCase() })
+
+  // Map columns — same logic as HTML parser
+  var colDate=-1,colDesc=-1,colDebit=-1,colCredit=-1,colAmt=-1
+  headers.forEach(function(h,i){
+    if(colDate<0  && /date/i.test(h))                                    colDate=i
+    if(colDesc<0  && /desc|narr|detail|particular|ref|remark/i.test(h))  colDesc=i
+    if(colDebit<0 && /debit|dr|withdrawal|out/i.test(h))                 colDebit=i
+    if(colCredit<0&& /credit|cr|deposit|in/i.test(h))                    colCredit=i
+    if(colAmt<0   && /amount|amt/i.test(h) && colDebit<0 && colCredit<0) colAmt=i
+  })
+
+  // Positional fallback
+  if(colDate<0) colDate=0
+  if(colDesc<0) colDesc=1
+  if(colDebit<0&&colCredit<0&&colAmt<0){
+    if(headers.length>=4){ colDebit=2; colCredit=3 }
+    else if(headers.length>=3){ colAmt=2 }
+  }
+
+  function parseAmt(v){
+    if(v===null||v===undefined||v==='') return 0
+    if(typeof v==='number') return Math.abs(v)
+    return parseFloat(String(v).replace(/[₦$£€,\s]/g,'').replace(/[()]/g,''))||0
+  }
+
+  function cellToDateStr(v){
+    if(!v&&v!==0) return null
+    // SheetJS with cellDates:true returns JS Date objects for date cells
+    if(v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0,10)
+    // Otherwise it's a string — use parseDate
+    return parseDate(String(v))
+  }
+
+  var rows=[]
+  for(var ri=headerRowIdx+1;ri<raw.length;ri++){
+    var row=raw[ri]
+    if(!row||row.every(function(c){ return c===''||c===null||c===undefined })) continue
+
+    var dateVal  = colDate>=0  ? row[colDate]  : ''
+    var descVal  = colDesc>=0  ? row[colDesc]  : ''
+    var debitVal = colDebit>=0 ? row[colDebit] : ''
+    var creditVal= colCredit>=0? row[colCredit]: ''
+    var amtVal   = colAmt>=0   ? row[colAmt]   : ''
+
+    if(!dateVal && !descVal) continue
+
+    var debit =parseAmt(debitVal)
+    var credit=parseAmt(creditVal)
+    var amt   =parseAmt(amtVal)
+
+    var finalAmt=0, category='expenditure'
+    if(colCredit>=0||colDebit>=0){
+      if(credit>0){ finalAmt=credit; category='income' }
+      else if(debit>0){ finalAmt=debit; category='expenditure' }
+      else continue
+    } else if(amt>0){
+      finalAmt=amt
+      var dl=String(descVal).toLowerCase()
+      if(/salary|credit|receipt|transfer in|lodg|deposit|inflow/i.test(dl)) category='income'
+      else category='expenditure'
+    } else { continue }
+
+    var parsedDate=cellToDateStr(dateVal)
+    if(!parsedDate) continue
+
+    rows.push({
+      date:parsedDate,
+      desc:String(descVal||'Bank transaction').trim(),
+      amount:finalAmt,
+      category:category,
+      method:'Bank Statement Import',
+      notes:'',
+      skip:false
+    })
+  }
+  return rows
 }
 
 function parseStatementHTML(html){

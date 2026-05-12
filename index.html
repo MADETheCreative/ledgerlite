@@ -165,7 +165,7 @@ var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 var S = {
   user: null, tab: 'dashboard', authTab: 'login',
   transactions: [], currency: '₦', setup: false,
-  pending: null, deleteIdx: null, loading: true,
+  pending: null, deleteIdx: null, editIdx: null, loading: true,
   authError: '', authLoading: false, saving: false,
   summaryPeriod: 'month', profitInput: '',
   form: { date: td(), desc: '', category: 'income', amount: '', method: 'Bank Transfer', notes: '' },
@@ -252,6 +252,21 @@ async function delTx(id){
   S.saving=false; updSave()
 }
 
+async function updateTx(id, changes){
+  S.saving=true; updSave()
+  var r = await sb.from('transactions').update({
+    date:changes.date, description:changes.desc, category:changes.category,
+    amount:changes.amount, method:changes.method, notes:changes.notes
+  }).eq('id',id).select().single()
+  if(!r.error && r.data){
+    var d=r.data
+    var idx=S.transactions.findIndex(function(t){ return t.id===id })
+    if(idx>-1) S.transactions[idx]={id:d.id,date:d.date,desc:d.description,category:d.category,amount:parseFloat(d.amount),method:d.method||'',notes:d.notes||''}
+  }
+  S.saving=false; updSave()
+  return r.error
+}
+
 async function saveSettings(){
   S.saving=true; updSave()
   await sb.from('user_settings').upsert({user_id:S.user.id,currency:S.currency,setup_done:S.setup,share_config:S.shareConfig},{onConflict:'user_id'})
@@ -293,7 +308,7 @@ function render(){
   if(S.loading){ root.innerHTML='<div class="splash"><div class="spinner"></div><p>Loading LedgerLite…</p></div>'; return }
   if(!S.user)  { root.innerHTML=buildAuth(); return }
   if(!S.setup) { root.innerHTML='<div class="app">'+buildHeader()+'<div class="content">'+buildSetup()+'</div></div>'; return }
-  root.innerHTML='<div class="app">'+buildHeader()+buildNav()+'<div class="content">'+(S.pending?buildConfirm():'')+(S.deleteIdx!==null?buildDelModal():'')+buildTab()+'</div></div>'
+  root.innerHTML='<div class="app">'+buildHeader()+buildNav()+'<div class="content">'+(S.pending?buildConfirm():'')+(S.deleteIdx!==null?buildDelModal():'')+(S.editIdx!==null?buildEditModal():'')+buildTab()+'</div></div>'
 }
 
 // ── AUTH SCREEN ───────────────────────────────────
@@ -468,7 +483,7 @@ function buildLedger(){
             '</td><td><span class="badge '+t.category+'">'+t.category+'</span></td>'+
             '<td style="font-size:12px;color:var(--text3);white-space:nowrap">'+esc(t.method)+'</td>'+
             '<td style="text-align:right;font-weight:600;white-space:nowrap;color:'+c+'">'+fmt(t.amount)+'</td>'+
-            '<td><button class="btn dan sm" onclick="confirmDel('+i+')" title="Delete"><i class="ti ti-trash"></i></button></td>'+
+            '<td style="white-space:nowrap"><button class="btn sm" onclick="openEdit('+i+')" title="Edit" style="margin-right:4px"><i class="ti ti-edit"></i></button><button class="btn dan sm" onclick="confirmDel('+i+')" title="Delete"><i class="ti ti-trash"></i></button></td>'+
           '</tr>'
         }).join('')+
       '</tbody></table></div></div>')
@@ -595,6 +610,33 @@ function buildDelModal(){
   '</div></div>'
 }
 
+function buildEditModal(){
+  var t=S.transactions[S.editIdx]
+  if(!t) return ''
+  return '<div class="mo" onclick="closeEdit()"><div class="mb" onclick="event.stopPropagation()" style="max-width:480px">'+
+    '<h3>Edit Entry</h3>'+
+    '<div class="grid2" style="margin-bottom:12px">'+
+      '<div class="fg"><label>Date</label><input type="date" id="e-date" value="'+esc(t.date)+'"></div>'+
+      '<div class="fg"><label>Category</label><select id="e-cat">'+
+        '<option value="income" '+(t.category==='income'?'selected':'')+'>💰 Income</option>'+
+        '<option value="expenditure" '+(t.category==='expenditure'?'selected':'')+'>💸 Expenditure</option>'+
+        '<option value="asset" '+(t.category==='asset'?'selected':'')+'>🏦 Asset</option>'+
+        '<option value="liability" '+(t.category==='liability'?'selected':'')+'>📋 Liability</option>'+
+      '</select></div>'+
+      '<div class="fg full"><label>Description</label><input type="text" id="e-desc" value="'+esc(t.desc)+'"></div>'+
+      '<div class="fg"><label>Amount ('+esc(S.currency)+')</label><input type="number" id="e-amt" value="'+t.amount+'" min="0" step="0.01"></div>'+
+      '<div class="fg"><label>Payment Method</label><select id="e-meth">'+
+        ['Bank Transfer','Cash','Card','Mobile Money','Cheque','Other'].map(function(m){ return '<option '+(t.method===m?'selected':'')+'>'+m+'</option>' }).join('')+
+      '</select></div>'+
+      '<div class="fg full"><label>Notes (optional)</label><textarea id="e-notes">'+esc(t.notes)+'</textarea></div>'+
+    '</div>'+
+    '<div class="btn-row">'+
+      '<button class="btn pri" onclick="doEdit()"><i class="ti ti-check"></i> Save Changes</button>'+
+      '<button class="btn" onclick="closeEdit()">Cancel</button>'+
+    '</div>'+
+  '</div></div>'
+}
+
 // ── ACTIONS ──────────────────────────────────────
 function setTab(t){ syncForm(); S.tab=t; render() }
 function setPeriod(p){ S.summaryPeriod=p; render() }
@@ -650,6 +692,28 @@ async function saveEntry(){
 function cancelPend(){ syncForm(); S.pending=null; render() }
 function clearForm(){ S.form={date:td(),desc:'',category:'income',amount:'',method:'Bank Transfer',notes:''}; render() }
 function confirmDel(i){ S.deleteIdx=i; render() }
+function openEdit(i){ S.editIdx=i; render() }
+function closeEdit(){ S.editIdx=null; render() }
+
+async function doEdit(){
+  var t=S.transactions[S.editIdx]
+  if(!t) return
+  var desc=(document.getElementById('e-desc')||{}).value||''
+  var amt=parseFloat((document.getElementById('e-amt')||{}).value)
+  if(!desc.trim()){ alert('Please add a description.'); return }
+  if(!amt||amt<=0){ alert('Please enter a valid amount.'); return }
+  var changes={
+    date:(document.getElementById('e-date')||{}).value||t.date,
+    desc:desc,
+    category:(document.getElementById('e-cat')||{}).value||t.category,
+    amount:amt,
+    method:(document.getElementById('e-meth')||{}).value||t.method,
+    notes:(document.getElementById('e-notes')||{}).value||''
+  }
+  var err=await updateTx(t.id, changes)
+  if(err){ alert('Could not update: '+err.message); return }
+  S.editIdx=null; render()
+}
 
 async function doDel(){
   if(S.deleteIdx===null) return

@@ -567,362 +567,240 @@ function buildProfit(){
 
 // ── IMPORT STATEMENT ─────────────────────────────
 function buildImport(){
-  // Step 1: no file parsed yet — show upload screen
   if(!S.importRows){
     return '<div class="sh"><h2>Import Bank Statement</h2></div>'+
-      (S.importError?'<div class="alert dngr"><i class="ti ti-alert-circle"></i>'+esc(S.importError)+'</div>':'')+
+      (S.importError?'<div class="alert dngr"><i class="ti ti-alert-circle"></i><div>'+esc(S.importError)+'</div></div>':'')+
       '<div class="card">'+
-        '<div class="ct">Upload Bank Statement</div>'+
-        '<p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px">'+
-          'Upload your bank statement as an <strong>Excel (.xlsx / .xls)</strong> or <strong>HTML</strong> file.<br><br>'+
-          '✅ Credits (money in) → <strong>Income</strong><br>'+
-          '✅ Debits (money out) → <strong>Expenditure</strong><br>'+
-          '✅ Review and correct any category before saving'+
+        '<div class="ct">Upload Excel Bank Statement</div>'+
+        '<p style="font-size:13px;color:var(--text2);line-height:1.9;margin-bottom:16px">'+
+          'Export your bank statement as an <strong>Excel file (.xlsx)</strong> from your bank\'s internet banking portal, then upload it here.<br><br>'+
+          '✅ Your file must have these column headers exactly:<br>'+
+          '<code style="background:var(--surface2);padding:4px 10px;border-radius:6px;font-size:12px;display:inline-block;margin:6px 0">Date &nbsp; Description &nbsp; Reference &nbsp; Debit &nbsp; Credit &nbsp; Balance</code><br><br>'+
+          '✅ <strong>Credit</strong> (money in) → marked as <strong>Income</strong><br>'+
+          '✅ <strong>Debit</strong> (money out) → marked as <strong>Expenditure</strong><br>'+
+          '✅ You can correct any category before saving'+
         '</p>'+
-        '<div style="border:2px dashed var(--border2);border-radius:var(--r);padding:32px 16px;text-align:center;cursor:pointer;background:var(--bg)" onclick="document.getElementById(\'stmt-file\').click()">'+
-          '<i class="ti ti-file-spreadsheet" style="font-size:36px;color:var(--text3);display:block;margin-bottom:8px"></i>'+
-          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">Click to choose your statement file</div>'+
-          '<div style="font-size:12px;color:var(--text3)">.xlsx, .xls, .html or .htm</div>'+
+        '<div style="border:2px dashed var(--border2);border-radius:var(--r);padding:32px 16px;text-align:center;background:var(--bg);cursor:pointer" onclick="document.getElementById(\'xl-file\').click()">'+
+          '<i class="ti ti-table-import" style="font-size:40px;color:var(--text3);display:block;margin-bottom:10px"></i>'+
+          '<div style="font-size:14px;font-weight:600;margin-bottom:4px">Click to choose your Excel file</div>'+
+          '<div style="font-size:12px;color:var(--text3)">.xlsx or .xls</div>'+
         '</div>'+
-        '<input type="file" id="stmt-file" accept=".xlsx,.xls,.html,.htm" style="display:none" onchange="handleFileUpload(this)">'+
-        '<div class="btn-row" style="margin-top:16px">'+
-          '<button class="btn pri" onclick="document.getElementById(\'stmt-file\').click()"><i class="ti ti-upload"></i> Choose File</button>'+
+        '<input type="file" id="xl-file" accept=".xlsx,.xls" style="display:none" onchange="handleXLUpload(this)">'+
+        '<div class="btn-row" style="margin-top:14px">'+
+          '<button class="btn pri" onclick="document.getElementById(\'xl-file\').click()"><i class="ti ti-upload"></i> Choose File</button>'+
         '</div>'+
       '</div>'+
       '<div class="card" style="background:var(--blue-bg);border-color:var(--blue)">'+
         '<div style="font-size:13px;color:var(--blue-dark);line-height:1.8">'+
           '<strong>💡 How to export from your bank</strong><br>'+
-          '<strong>GTBank:</strong> Internet Banking → Accounts → Statement → Download → Excel<br>'+
-          '<strong>Access Bank:</strong> Online Banking → Account Statement → Export → Excel<br>'+
-          '<strong>Zenith:</strong> E-Banking → Statement Request → Format: Excel<br>'+
-          '<strong>UBA:</strong> Mobile/Internet Banking → Statements → Download Excel<br>'+
-          '<strong>Others:</strong> Look for "Download", "Export" on your statement page and choose Excel or HTML'+
+          'Log into internet banking → Account Statement → choose a date range → Download / Export → select <strong>Excel</strong> format.<br>'+
+          'If the downloaded file has extra rows above the headers (like account name or account number), that\'s fine — the app will find the header row automatically.'+
         '</div>'+
       '</div>'
   }
 
-  // Step 2: file parsed — show preview table for review
+  // Preview screen
   var rows=S.importRows
-  var skipped=rows.filter(function(r){ return r.skip }).length
-  var toImport=rows.filter(function(r){ return !r.skip })
+  var toImport=rows.filter(function(r){ return !r.skip }).length
+  var skipped=rows.length-toImport
   return '<div class="sh"><h2>Review &amp; Confirm Import</h2></div>'+
     '<div class="alert info"><i class="ti ti-info-circle"></i>'+
-      '<div>Found <strong>'+rows.length+' transactions</strong>. '+
-      (skipped>0?'<strong>'+skipped+' skipped</strong> (duplicates or unreadable). ':'')+
-      'Review categories below and correct any that are wrong, then click <strong>Save All to Ledger</strong>.</div>'+
+      '<div>Found <strong>'+rows.length+' transactions</strong>'+
+      (skipped>0?' &mdash; <strong>'+skipped+' ticked to skip</strong>':'')+
+      '. Fix any wrong categories, untick anything you don\'t want, then click <strong>Save to Ledger</strong>.</div>'+
     '</div>'+
     '<div class="card">'+
       '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px">'+
-        '<div class="ct" style="margin-bottom:0">'+toImport.length+' entries to import</div>'+
+        '<div class="ct" style="margin-bottom:0"><strong>'+toImport+'</strong> entries will be saved</div>'+
         '<div style="display:flex;gap:8px">'+
           '<button class="btn" onclick="S.importRows=null;S.importError=\'\';render()"><i class="ti ti-refresh"></i> Start Over</button>'+
-          '<button class="btn pri" onclick="saveImport()"><i class="ti ti-check"></i> Save All to Ledger</button>'+
+          '<button class="btn pri" onclick="saveImport()"><i class="ti ti-check"></i> Save to Ledger</button>'+
         '</div>'+
       '</div>'+
       '<div class="tw"><table>'+
-        '<thead><tr><th>Date</th><th>Description</th><th style="text-align:right">Amount</th><th>Category</th><th>Skip?</th></tr></thead>'+
-        '<tbody>'+
-          rows.map(function(r,i){
-            var amtColor=r.category==='income'?'var(--green-dark)':'var(--red)'
-            return '<tr style="'+(r.skip?'opacity:0.4':'')+'">'+
-              '<td style="white-space:nowrap;font-size:12px;color:var(--text3)">'+esc(r.date)+'</td>'+
-              '<td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px">'+esc(r.desc)+'</td>'+
-              '<td style="text-align:right;font-weight:600;white-space:nowrap;color:'+amtColor+'">'+fmt(r.amount)+'</td>'+
-              '<td><select class="imp-cat" data-i="'+i+'" onchange="impCatChange('+i+',this.value)" style="font-size:12px;padding:4px 6px;border:.5px solid var(--border2);border-radius:6px;background:var(--bg);font-family:var(--ui)">'+
-                ['income','expenditure','asset','liability'].map(function(c){
-                  return '<option value="'+c+'" '+(r.category===c?'selected':'')+'>'+c+'</option>'
-                }).join('')+
-              '</select></td>'+
-              '<td style="text-align:center"><input type="checkbox" '+(r.skip?'checked':'')+' onchange="impSkipChange('+i+',this.checked)" style="width:16px;height:16px;cursor:pointer"></td>'+
-            '</tr>'
-          }).join('')+
-        '</tbody>'+
+        '<thead><tr><th>Date</th><th>Description</th><th>Reference</th><th style="text-align:right">Debit</th><th style="text-align:right">Credit</th><th>Category</th><th style="text-align:center">Skip</th></tr></thead>'+
+        '<tbody>'+rows.map(function(r,i){
+          return '<tr id="imp-row-'+i+'" style="'+(r.skip?'opacity:0.35':'')+'">'+
+            '<td style="white-space:nowrap;font-size:12px;color:var(--text3)">'+esc(r.date)+'</td>'+
+            '<td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px">'+esc(r.desc)+'</td>'+
+            '<td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11px;color:var(--text3)">'+esc(r.ref||'')+'</td>'+
+            '<td style="text-align:right;font-size:13px;color:var(--red);white-space:nowrap">'+(r.debit>0?fmt(r.debit):'')+'</td>'+
+            '<td style="text-align:right;font-size:13px;color:var(--green-dark);white-space:nowrap">'+(r.credit>0?fmt(r.credit):'')+'</td>'+
+            '<td><select data-i="'+i+'" onchange="impCatChange('+i+',this.value)" style="font-size:12px;padding:4px 6px;border:.5px solid var(--border2);border-radius:6px;background:var(--bg);font-family:var(--ui)">'+
+              ['income','expenditure','asset','liability'].map(function(c){
+                return '<option value="'+c+'" '+(r.category===c?'selected':'')+'>'+c+'</option>'
+              }).join('')+
+            '</select></td>'+
+            '<td style="text-align:center"><input type="checkbox" '+(r.skip?'checked':'')+' onchange="impSkipChange('+i+',this.checked)" style="width:16px;height:16px;cursor:pointer"></td>'+
+          '</tr>'
+        }).join('')+'</tbody>'+
       '</table></div>'+
+      '<div style="margin-top:12px;text-align:right">'+
+        '<button class="btn pri" onclick="saveImport()"><i class="ti ti-check"></i> Save to Ledger</button>'+
+      '</div>'+
     '</div>'
 }
 
 // ── IMPORT LOGIC ─────────────────────────────────
-function handleFileUpload(input){
+function handleXLUpload(input){
   var file=input.files[0]
-  if(!file){ return }
-  var isExcel=/\.(xlsx|xls)$/i.test(file.name)
-  var isHTML=/\.html?$/i.test(file.name)
-  if(!isExcel && !isHTML){
-    S.importError='Please upload an Excel (.xlsx/.xls) or HTML (.html/.htm) file.'
+  if(!file) return
+  if(!/\.(xlsx|xls)$/i.test(file.name)){
+    S.importError='Please upload an Excel file (.xlsx or .xls).'
     S.importRows=null; render(); return
   }
-  var reader=new FileReader()
-  if(isExcel){
-    reader.onload=function(e){
-      try{
-        var data=new Uint8Array(e.target.result)
-        var workbook=XLSX.read(data,{type:'array',cellDates:true})
-        // Use the first sheet
-        var sheetName=workbook.SheetNames[0]
-        var sheet=workbook.Sheets[sheetName]
-        // Convert to array of arrays
-        var raw=XLSX.utils.sheet_to_json(sheet,{header:1,defval:''})
-        var rows=parseStatementRows(raw)
-        if(!rows||rows.length===0){
-          S.importError='Could not find any transactions in this Excel file. Make sure it contains a transactions sheet with Date, Description and Amount columns.'
-          S.importRows=null; render(); return
-        }
-        S.importError=''; S.importRows=rows; render()
-      }catch(err){
-        S.importError='Could not read this Excel file: '+err.message
-        S.importRows=null; render()
-      }
-    }
-    reader.readAsArrayBuffer(file)
+  // Dynamically load SheetJS if not already loaded
+  if(typeof XLSX==='undefined'){
+    var script=document.createElement('script')
+    script.src='https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
+    script.onload=function(){ readXLFile(file) }
+    script.onerror=function(){ S.importError='Could not load Excel reader. Check your internet connection.'; render() }
+    document.head.appendChild(script)
   } else {
-    reader.onload=function(e){
-      try{
-        var html=e.target.result
-        var rows=parseStatementHTML(html)
-        if(!rows||rows.length===0){
-          S.importError='Could not find any transactions in this file. Make sure it is an HTML bank statement with a transactions table.'
-          S.importRows=null; render(); return
-        }
-        S.importError=''; S.importRows=rows; render()
-      }catch(err){
-        S.importError='Could not read this file: '+err.message
-        S.importRows=null; render()
-      }
-    }
-    reader.readAsText(file)
+    readXLFile(file)
   }
 }
 
-// Parse Excel rows (array of arrays from SheetJS)
-function parseStatementRows(raw){
-  if(!raw||raw.length<2) throw new Error('Not enough rows in this file.')
-
-  // Find the header row — look for a row containing "date"
-  var headerRowIdx=0
-  for(var i=0;i<Math.min(raw.length,10);i++){
-    var rowStr=raw[i].join(' ').toLowerCase()
-    if(/date/.test(rowStr)){ headerRowIdx=i; break }
+function readXLFile(file){
+  var reader=new FileReader()
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true})
+      var ws=wb.Sheets[wb.SheetNames[0]]
+      var raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''})
+      var rows=parseXLRows(raw)
+      if(!rows||rows.length===0){
+        S.importError='No transactions found. Make sure your file has the headers: Date, Description, Reference, Debit, Credit, Balance.'
+        S.importRows=null; render(); return
+      }
+      S.importError=''; S.importRows=rows; render()
+    }catch(err){
+      S.importError='Could not read this file: '+err.message
+      S.importRows=null; render()
+    }
   }
+  reader.readAsArrayBuffer(file)
+}
 
-  var headers=raw[headerRowIdx].map(function(h){ return String(h).trim().toLowerCase() })
+function parseXLRows(raw){
+  if(!raw||raw.length<2) throw new Error('File appears empty.')
 
-  // Map columns — same logic as HTML parser
-  var colDate=-1,colDesc=-1,colDebit=-1,colCredit=-1,colAmt=-1
+  // Find the header row — scan first 15 rows for one containing "date" AND "debit" or "credit"
+  var headerIdx=-1
+  for(var i=0;i<Math.min(raw.length,15);i++){
+    var line=raw[i].join('|').toLowerCase()
+    if(/date/.test(line)&&(/debit/.test(line)||/credit/.test(line))){
+      headerIdx=i; break
+    }
+  }
+  if(headerIdx<0) throw new Error('Could not find header row. Expected headers: Date, Description, Reference, Debit, Credit, Balance.')
+
+  // Map exact column headers (case-insensitive)
+  var headers=raw[headerIdx].map(function(h){ return String(h).trim().toLowerCase() })
+  var col={}
   headers.forEach(function(h,i){
-    if(colDate<0  && /date/i.test(h))                                    colDate=i
-    if(colDesc<0  && /desc|narr|detail|particular|ref|remark/i.test(h))  colDesc=i
-    if(colDebit<0 && /debit|dr|withdrawal|out/i.test(h))                 colDebit=i
-    if(colCredit<0&& /credit|cr|deposit|in/i.test(h))                    colCredit=i
-    if(colAmt<0   && /amount|amt/i.test(h) && colDebit<0 && colCredit<0) colAmt=i
+    if(/^date$/i.test(h.trim()))                    col.date=i
+    if(/^description$/i.test(h.trim()))             col.desc=i
+    if(/^reference$/i.test(h.trim()))               col.ref=i
+    if(/^debit$/i.test(h.trim()))                   col.debit=i
+    if(/^credit$/i.test(h.trim()))                  col.credit=i
+    if(/^balance$/i.test(h.trim()))                 col.bal=i
   })
 
-  // Positional fallback
-  if(colDate<0) colDate=0
-  if(colDesc<0) colDesc=1
-  if(colDebit<0&&colCredit<0&&colAmt<0){
-    if(headers.length>=4){ colDebit=2; colCredit=3 }
-    else if(headers.length>=3){ colAmt=2 }
+  // Fallback: if exact match failed, try partial match
+  if(col.date===undefined) headers.forEach(function(h,i){ if(/date/i.test(h)&&col.date===undefined) col.date=i })
+  if(col.desc===undefined) headers.forEach(function(h,i){ if(/desc|narr|detail|particular/i.test(h)&&col.desc===undefined) col.desc=i })
+  if(col.ref===undefined)  headers.forEach(function(h,i){ if(/ref/i.test(h)&&col.ref===undefined) col.ref=i })
+  if(col.debit===undefined)headers.forEach(function(h,i){ if(/debit|dr/i.test(h)&&col.debit===undefined) col.debit=i })
+  if(col.credit===undefined)headers.forEach(function(h,i){ if(/credit|cr/i.test(h)&&col.credit===undefined) col.credit=i })
+
+  if(col.date===undefined||col.desc===undefined||(col.debit===undefined&&col.credit===undefined)){
+    throw new Error('Could not map required columns. Found headers: '+headers.join(', '))
   }
 
   function parseAmt(v){
     if(v===null||v===undefined||v==='') return 0
     if(typeof v==='number') return Math.abs(v)
-    return parseFloat(String(v).replace(/[₦$£€,\s]/g,'').replace(/[()]/g,''))||0
+    var n=parseFloat(String(v).replace(/[₦$£€,\s]/g,'').replace(/[()]/g,''))
+    return isNaN(n)?0:Math.abs(n)
   }
 
-  function cellToDateStr(v){
+  function toDateStr(v){
     if(!v&&v!==0) return null
-    // SheetJS with cellDates:true returns JS Date objects for date cells
-    if(v instanceof Date && !isNaN(v.getTime())) return v.toISOString().slice(0,10)
-    // Otherwise it's a string — use parseDate
-    return parseDate(String(v))
+    if(v instanceof Date&&!isNaN(v.getTime())) return v.toISOString().slice(0,10)
+    var s=String(v).trim()
+    // YYYY-MM-DD
+    if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
+    // DD/MM/YYYY or DD-MM-YYYY
+    var m=s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})$/)
+    if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')
+    // DD MMM YYYY
+    var months={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'}
+    var m2=s.match(/^(\d{1,2})[- ]([a-zA-Z]{3})[- ](\d{2,4})$/)
+    if(m2){ var mo=months[m2[2].toLowerCase()]; var yr=m2[3].length===2?'20'+m2[3]:m2[3]; if(mo) return yr+'-'+mo+'-'+m2[1].padStart(2,'0') }
+    // Native fallback
+    var d=new Date(s)
+    return isNaN(d.getTime())?null:d.toISOString().slice(0,10)
   }
 
   var rows=[]
-  for(var ri=headerRowIdx+1;ri<raw.length;ri++){
+  for(var ri=headerIdx+1;ri<raw.length;ri++){
     var row=raw[ri]
     if(!row||row.every(function(c){ return c===''||c===null||c===undefined })) continue
 
-    var dateVal  = colDate>=0  ? row[colDate]  : ''
-    var descVal  = colDesc>=0  ? row[colDesc]  : ''
-    var debitVal = colDebit>=0 ? row[colDebit] : ''
-    var creditVal= colCredit>=0? row[colCredit]: ''
-    var amtVal   = colAmt>=0   ? row[colAmt]   : ''
-
-    if(!dateVal && !descVal) continue
+    var dateVal  = col.date!==undefined  ? row[col.date]  : ''
+    var descVal  = col.desc!==undefined  ? row[col.desc]  : ''
+    var refVal   = col.ref!==undefined   ? row[col.ref]   : ''
+    var debitVal = col.debit!==undefined ? row[col.debit] : ''
+    var creditVal= col.credit!==undefined? row[col.credit]: ''
 
     var debit =parseAmt(debitVal)
     var credit=parseAmt(creditVal)
-    var amt   =parseAmt(amtVal)
 
-    var finalAmt=0, category='expenditure'
-    if(colCredit>=0||colDebit>=0){
-      if(credit>0){ finalAmt=credit; category='income' }
-      else if(debit>0){ finalAmt=debit; category='expenditure' }
-      else continue
-    } else if(amt>0){
-      finalAmt=amt
-      var dl=String(descVal).toLowerCase()
-      if(/salary|credit|receipt|transfer in|lodg|deposit|inflow/i.test(dl)) category='income'
-      else category='expenditure'
-    } else { continue }
+    // Skip rows with no money movement
+    if(debit===0&&credit===0) continue
 
-    var parsedDate=cellToDateStr(dateVal)
+    var parsedDate=toDateStr(dateVal)
     if(!parsedDate) continue
 
-    rows.push({
-      date:parsedDate,
-      desc:String(descVal||'Bank transaction').trim(),
-      amount:finalAmt,
-      category:category,
-      method:'Bank Statement Import',
-      notes:'',
-      skip:false
-    })
-  }
-  return rows
-}
-
-function parseStatementHTML(html){
-  // Parse the HTML string into a DOM we can query
-  var parser=new DOMParser()
-  var doc=parser.parseFromString(html,'text/html')
-  var rows=[]
-
-  // Find all tables in the document
-  var tables=doc.querySelectorAll('table')
-  if(!tables.length) throw new Error('No tables found in this HTML file.')
-
-  // Pick the table with the most rows — that's almost certainly the transactions table
-  var bestTable=null, bestCount=0
-  tables.forEach(function(tbl){
-    var count=tbl.querySelectorAll('tr').length
-    if(count>bestCount){ bestCount=count; bestTable=tbl }
-  })
-  if(!bestTable) throw new Error('Could not identify a transactions table.')
-
-  // Read header row to figure out which column is which
-  var headerRow=bestTable.querySelector('tr')
-  if(!headerRow) throw new Error('Table has no header row.')
-  var headers=[]
-  headerRow.querySelectorAll('th,td').forEach(function(cell){
-    headers.push(cell.textContent.trim().toLowerCase())
-  })
-
-  // Map column names to indices — covers common Nigerian bank formats
-  var colDate=-1, colDesc=-1, colDebit=-1, colCredit=-1, colAmt=-1, colBal=-1
-  headers.forEach(function(h,i){
-    if(colDate<0  && /date/i.test(h))                           colDate=i
-    if(colDesc<0  && /desc|narr|detail|particular|ref|remark/i.test(h)) colDesc=i
-    if(colDebit<0 && /debit|dr|withdrawal|out/i.test(h))        colDebit=i
-    if(colCredit<0&& /credit|cr|deposit|in/i.test(h))           colCredit=i
-    if(colAmt<0   && /amount|amt/i.test(h) && colDebit<0 && colCredit<0) colAmt=i
-    if(colBal<0   && /balance|bal/i.test(h))                    colBal=i
-  })
-
-  // If we still can't identify columns, try positional fallback (date, desc, debit, credit, balance)
-  if(colDate<0 && headers.length>=2) colDate=0
-  if(colDesc<0 && headers.length>=2) colDesc=1
-  if(colDebit<0 && colCredit<0 && colAmt<0){
-    if(headers.length>=4){ colDebit=2; colCredit=3 }
-    else if(headers.length>=3){ colAmt=2 }
-  }
-
-  // Process data rows (skip header)
-  var dataRows=bestTable.querySelectorAll('tr')
-  dataRows.forEach(function(row,rowIdx){
-    if(rowIdx===0) return // skip header
-    var cells=row.querySelectorAll('td,th')
-    if(cells.length<2) return
-
-    var get=function(i){ return i>=0&&i<cells.length ? cells[i].textContent.trim() : '' }
-
-    var dateStr  = colDate>=0  ? get(colDate)  : ''
-    var descStr  = colDesc>=0  ? get(colDesc)  : ''
-    var debitStr = colDebit>=0 ? get(colDebit) : ''
-    var creditStr= colCredit>=0? get(colCredit): ''
-    var amtStr   = colAmt>=0   ? get(colAmt)   : ''
-
-    // Skip blank rows and balance-only rows
-    if(!dateStr && !descStr) return
-
-    // Parse amount — strip currency symbols, commas, spaces
-    function parseAmt(s){ return parseFloat(s.replace(/[₦$£€,\s]/g,'').replace(/[()]/g,''))||0 }
-
-    var debit =parseAmt(debitStr)
-    var credit=parseAmt(creditStr)
-    var amt   =parseAmt(amtStr)
-
-    // Determine amount and category
-    var finalAmt=0, category='expenditure'
-    if(colCredit>=0||colDebit>=0){
-      if(credit>0){ finalAmt=credit; category='income' }
-      else if(debit>0){ finalAmt=debit; category='expenditure' }
-      else return // blank row
-    } else if(amt>0){
-      finalAmt=amt
-      // Try to infer direction from description keywords
-      var dl=descStr.toLowerCase()
-      if(/salary|credit|receipt|transfer in|lodg|deposit|inflow/i.test(dl)) category='income'
-      else category='expenditure'
-    } else {
-      return // no amount, skip
-    }
-
-    // Parse date — try common formats: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY, DD MMM YYYY
-    var parsedDate=parseDate(dateStr)
-    if(!parsedDate) return // can't parse date, skip
+    var category = credit>0 ? 'income' : 'expenditure'
+    var amount   = credit>0 ? credit : debit
 
     rows.push({
-      date: parsedDate,
-      desc: descStr || 'Bank transaction',
-      amount: finalAmt,
+      date:     parsedDate,
+      desc:     String(descVal||'Bank transaction').trim(),
+      ref:      String(refVal||'').trim(),
+      debit:    debit,
+      credit:   credit,
+      amount:   amount,
       category: category,
-      method: 'Bank Statement Import',
-      notes: '',
-      skip: false
+      method:   'Bank Statement Import',
+      notes:    refVal ? 'Ref: '+String(refVal).trim() : '',
+      skip:     false
     })
-  })
-
+  }
   return rows
 }
 
-function parseDate(s){
-  if(!s) return null
-  s=s.trim()
-  // YYYY-MM-DD
-  if(/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
-  // DD/MM/YYYY or DD-MM-YYYY
-  var m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/)
-  if(m) return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0')
-  // DD MMM YYYY e.g. 12 Jan 2024
-  var months={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'}
-  var m2=s.match(/^(\d{1,2})[- ]([a-zA-Z]{3})[- ](\d{4})$/)
-  if(m2){ var mo=months[m2[2].toLowerCase()]; if(mo) return m2[3]+'-'+mo+'-'+m2[1].padStart(2,'0') }
-  // MMM DD YYYY e.g. Jan 12 2024
-  var m3=s.match(/^([a-zA-Z]{3})[- ](\d{1,2})[,\s]+(\d{4})$/)
-  if(m3){ var mo2=months[m3[1].toLowerCase()]; if(mo2) return m3[3]+'-'+mo2+'-'+m3[2].padStart(2,'0') }
-  // Try native Date parse as last resort
-  var d=new Date(s)
-  if(!isNaN(d.getTime())) return d.toISOString().slice(0,10)
-  return null
-}
-
-function impCatChange(i, val){
+function impCatChange(i,val){
   if(S.importRows&&S.importRows[i]) S.importRows[i].category=val
 }
 
-function impSkipChange(i, checked){
+function impSkipChange(i,checked){
   if(S.importRows&&S.importRows[i]) S.importRows[i].skip=checked
-  // update opacity live without full re-render
-  var rows=document.querySelectorAll('tbody tr')
-  if(rows[i]) rows[i].style.opacity=checked?'0.4':'1'
+  var row=document.getElementById('imp-row-'+i)
+  if(row) row.style.opacity=checked?'0.35':'1'
+  // update count in header
+  var toImport=S.importRows.filter(function(r){ return !r.skip }).length
+  var hdr=document.querySelector('.ct strong')
+  if(hdr) hdr.textContent=toImport
 }
 
 async function saveImport(){
   if(!S.importRows) return
   var toSave=S.importRows.filter(function(r){ return !r.skip })
-  if(!toSave.length){ alert('No entries selected to import.'); return }
+  if(!toSave.length){ alert('No entries selected. Uncheck some rows first.'); return }
+  if(!confirm('Save '+toSave.length+' transactions to your ledger?')) return
 
   S.saving=true; updSave()
   var saved=0, failed=0
@@ -934,16 +812,17 @@ async function saveImport(){
     }).select().single()
     if(!res.error&&res.data){
       var d=res.data
-      S.transactions.unshift({id:d.id,date:d.date,desc:d.description,category:d.category,amount:parseFloat(d.amount),method:d.method||'',notes:d.notes||''})
+      S.transactions.unshift({id:d.id,date:d.date,desc:d.description,category:d.category,
+        amount:parseFloat(d.amount),method:d.method||'',notes:d.notes||''})
       saved++
     } else { failed++ }
   }
   S.saving=false; updSave()
   S.importRows=null; S.importError=''
-  S.tab='ledger'
-  render()
-  if(failed>0) alert(saved+' entries saved. '+failed+' could not be saved — you can add those manually.')
+  S.tab='ledger'; render()
+  if(failed>0) alert(saved+' entries saved. '+failed+' failed — add those manually.')
 }
+
 function buildSettingsTab(){
   var name=(S.user&&S.user.user_metadata&&S.user.user_metadata.full_name)||'—'
   var email=(S.user&&S.user.email)||'—'

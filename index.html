@@ -167,7 +167,7 @@ var sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY)
 var S = {
   user: null, tab: 'dashboard', authTab: 'login',
   transactions: [], currency: '₦', setup: false,
-  pending: null, deleteIdx: null, editIdx: null, loading: true, importRows: null, importError: '',
+  pending: null, deleteIdx: null, editIdx: null, loading: true, importRows: null, importError: '', ledgerFilter: 'all',
   authError: '', authLoading: false, saving: false,
   summaryPeriod: 'month', profitInput: '',
   form: { date: td(), desc: '', category: 'income', amount: '', method: 'Bank Transfer', notes: '' },
@@ -474,23 +474,71 @@ function buildRecord(){
 
 // ── LEDGER ───────────────────────────────────────
 function buildLedger(){
-  var txs=S.transactions
-  return '<div class="sh"><h2>Full Ledger</h2><span class="tm">'+txs.length+' entr'+(txs.length===1?'y':'ies')+'</span></div>'+
-    (txs.length===0
-      ?'<div class="card"><div class="empty"><i class="ti ti-file-text"></i><p>No transactions yet.</p></div></div>'
-      :'<div class="card"><div class="tw"><table><thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Method</th><th style="text-align:right">Amount</th><th></th></tr></thead><tbody>'+
-        txs.map(function(t,i){
-          var c=t.category==='income'?'var(--green-dark)':t.category==='expenditure'?'var(--red)':'var(--text)'
-          return '<tr>'+
-            '<td style="white-space:nowrap;font-size:12px;color:var(--text3)">'+esc(t.date)+'</td>'+
-            '<td><div style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.desc)+'</div>'+(t.notes?'<div style="font-size:11px;color:var(--text3)">'+esc(t.notes)+'</div>':'')+
-            '</td><td><span class="badge '+t.category+'">'+t.category+'</span></td>'+
-            '<td style="font-size:12px;color:var(--text3);white-space:nowrap">'+esc(t.method)+'</td>'+
-            '<td style="text-align:right;font-weight:600;white-space:nowrap;color:'+c+'">'+fmt(t.amount)+'</td>'+
-            '<td style="white-space:nowrap"><button class="btn sm" onclick="openEdit('+i+')" title="Edit" style="margin-right:4px"><i class="ti ti-edit"></i></button><button class="btn dan sm" onclick="confirmDel('+i+')" title="Delete"><i class="ti ti-trash"></i></button></td>'+
-          '</tr>'
-        }).join('')+
-      '</tbody></table></div></div>')
+  var all=S.transactions
+  var f=S.ledgerFilter
+  var txs=f==='all' ? all : all.filter(function(t){ return t.category===f })
+  var total=txs.reduce(function(s,t){ return s+t.amount },0)
+
+  var filters=[
+    {id:'all',    label:'All',         color:''},
+    {id:'income', label:'Income',      color:'var(--green-dark)'},
+    {id:'expenditure',label:'Expenditure',color:'var(--red)'},
+    {id:'asset',  label:'Assets',      color:'var(--blue-dark)'},
+    {id:'liability',label:'Liabilities',color:'var(--amber-dark)'}
+  ]
+
+  var filterBar='<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">'+
+    filters.map(function(fl){
+      var active=f===fl.id
+      var count=fl.id==='all'?all.length:all.filter(function(t){ return t.category===fl.id }).length
+      return '<button onclick="setLedgerFilter(\''+fl.id+'\')" style="'+
+        'padding:5px 12px;font-size:12px;font-weight:600;border-radius:20px;cursor:pointer;font-family:var(--ui);'+
+        'border:.5px solid '+(active?'transparent':'var(--border2)')+';'+
+        'background:'+(active?(fl.color||'var(--text)'):'var(--surface)')+';'+
+        'color:'+(active?'#fff':(fl.color||'var(--text2)'))+';'+
+        '">'+fl.label+' <span style="opacity:0.7;font-weight:400">('+count+')</span></button>'
+    }).join('')+
+  '</div>'
+
+  var emptyMsg='<div class="card"><div class="empty"><i class="ti ti-file-text"></i>'+
+    '<p>'+(f==='all'?'No transactions yet. Go to <strong>Record</strong> to add your first entry.':
+      'No <strong>'+f+'</strong> entries yet.')+'</p></div></div>'
+
+  if(all.length===0) return '<div class="sh"><h2>Ledger</h2></div>'+filterBar+emptyMsg
+
+  return '<div class="sh"><h2>Ledger</h2>'+
+    '<span class="tm">'+txs.length+' entr'+(txs.length===1?'y':'ies')+(f!=='all'?' &mdash; '+f:'')+' &mdash; Total: <strong>'+fmt(total)+'</strong></span>'+
+  '</div>'+
+  filterBar+
+  (txs.length===0 ? emptyMsg :
+    '<div class="card"><div class="tw"><table>'+
+      '<thead><tr><th>Date</th><th>Description</th><th>Type</th><th>Method</th><th style="text-align:right">Amount</th><th></th></tr></thead>'+
+      '<tbody>'+txs.map(function(t){
+        // find real index in S.transactions for edit/delete
+        var realIdx=S.transactions.indexOf(t)
+        var c=t.category==='income'?'var(--green-dark)':t.category==='expenditure'?'var(--red)':'var(--text)'
+        return '<tr>'+
+          '<td style="white-space:nowrap;font-size:12px;color:var(--text3)">'+esc(t.date)+'</td>'+
+          '<td><div style="font-weight:500;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(t.desc)+'</div>'+
+            (t.notes?'<div style="font-size:11px;color:var(--text3)">'+esc(t.notes)+'</div>':'')+
+          '</td>'+
+          '<td><span class="badge '+t.category+'">'+t.category+'</span></td>'+
+          '<td style="font-size:12px;color:var(--text3);white-space:nowrap">'+esc(t.method)+'</td>'+
+          '<td style="text-align:right;font-weight:600;white-space:nowrap;color:'+c+'">'+fmt(t.amount)+'</td>'+
+          '<td style="white-space:nowrap">'+
+            '<button class="btn sm" onclick="openEdit('+realIdx+')" title="Edit" style="margin-right:4px"><i class="ti ti-edit"></i></button>'+
+            '<button class="btn dan sm" onclick="confirmDel('+realIdx+')" title="Delete"><i class="ti ti-trash"></i></button>'+
+          '</td>'+
+        '</tr>'
+      }).join('')+
+      '</tbody></table></div>'+
+      '<div style="display:flex;justify-content:flex-end;padding-top:10px;border-top:.5px solid var(--border);margin-top:4px">'+
+        '<span style="font-size:13px;font-weight:700;font-family:var(--font)">'+
+          (f==='all'?'Total entries: ':'Total '+f+': ')+
+          '<span style="color:'+(f==='income'?'var(--green-dark)':f==='expenditure'?'var(--red)':f==='asset'?'var(--blue-dark)':f==='liability'?'var(--amber-dark)':'var(--text)')+'">'+fmt(total)+'</span>'+
+        '</span>'+
+      '</div>'+
+    '</div>')
 }
 
 // ── SUMMARY ──────────────────────────────────────
@@ -902,6 +950,7 @@ function buildEditModal(){
 function setTab(t){ syncForm(); S.tab=t; render() }
 function setPeriod(p){ S.summaryPeriod=p; render() }
 function setAuthTab(t){ S.authTab=t; S.authError=''; render() }
+function setLedgerFilter(f){ S.ledgerFilter=f; render() }
 
 async function handleAuth(){
   var email=(document.getElementById('a-email')||{}).value||''
